@@ -1,0 +1,9 @@
+flask
+scikit-learn
+numpy
+pandas
+reportlab
+openpyxl
+werkzeug
+gunicorn
+eventlet
