@@ -2,7 +2,7 @@
 
 title: FactoryOS
 
-emoji: 🏭
+emoji: factory
 
 colorFrom: gray
 
