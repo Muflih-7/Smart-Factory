@@ -503,7 +503,7 @@ def sidebar(active):
     <div class="logo"><div class="logo-icon">{ICONS["cpu"]}</div><span class="logo-name">FACTORYOS</span></div>
     <div class="logo-sub">SMART FACTORY PLATFORM</div>
   </div>
-  <div class="sb-nav">
+  <div class="sb-nav" id="sbnav" onscroll="localStorage.setItem('sbs',this.scrollTop)">
     <div class="nl">Overview</div>
     {na("home","/","Dashboard")}
     <a href="/twin" class="na {"active" if active=="twin" else ""}">{ICONS["twin"]}<span>3D Twin</span></a>
@@ -524,7 +524,12 @@ def sidebar(active):
     <div class="sc-wrap"><div class="sc-lbl">Scenario</div>{sc_html}</div>
     <div class="sb-foot"><a href="/logout" class="lo-btn">{ICONS["logout"]}<span>Sign out · {session.get("user","")}</span></a></div>
   </div>
-</nav>"""
+</nav><script>
+(function(){{
+  var n=document.getElementById('sbnav');
+  if(n){{var s=localStorage.getItem('sbs');if(s)n.scrollTop=parseInt(s);}}
+}})();
+</script>"""
 
 def chart(history, color, min_v=None, max_v=None, unit=""):
     n = len(history)
@@ -1252,14 +1257,14 @@ def api_alerts():
     return jsonify(alert_log[:50])
 
 
-# ── 3D TWIN PAGE ──────────────────────────────────────────────────────────────
+# ── 3D TWIN PAGE — CRAZY EDITION ──────────────────────────────────────────────
 TWIN_PAGE = """
 <style>
-.ts{position:fixed;top:0;left:220px;right:0;bottom:0;display:flex;flex-direction:column;background:var(--bg);}
+.ts{position:fixed;top:0;left:220px;right:0;bottom:0;display:flex;flex-direction:column;background:#0a0a0a;}
 .tbody{display:flex;flex:1;overflow:hidden;}
 .tcw{flex:1;position:relative;overflow:hidden;}
-#twc{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;}
-.trp{width:230px;background:var(--s1);border-left:1px solid var(--b1);overflow-y:auto;padding:14px;flex-shrink:0;}
+#twc{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;display:block;}
+.trp{width:240px;background:var(--s1);border-left:1px solid var(--b1);overflow-y:auto;padding:14px;flex-shrink:0;}
 .trp::-webkit-scrollbar{width:2px;}.trp::-webkit-scrollbar-thumb{background:var(--b1);}
 .rp-id{font-size:9px;color:var(--t3);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:2px;}
 .rp-nm{font-size:14px;font-weight:700;color:var(--tx);margin-bottom:6px;}
@@ -1279,8 +1284,6 @@ TWIN_PAGE = """
 .bt{height:3px;background:var(--s3);border-radius:2px;}
 .bf{height:100%;border-radius:2px;transition:width 0.8s ease;}
 .rs{font-size:8px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:2px;padding-top:10px;margin-top:10px;border-top:1px solid var(--b1);margin-bottom:7px;font-family:'Space Mono',monospace;}
-.rr{display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:3px;}
-.rr span{color:var(--t2);font-family:'Space Mono',monospace;}
 .rl2{display:block;text-align:center;padding:7px;font-size:9.5px;font-weight:700;letter-spacing:1px;text-decoration:none;border-radius:3px;margin-bottom:5px;transition:all 0.12s;font-family:'Space Mono',monospace;}
 .rl-ac{background:var(--acd);border:1px solid var(--ac);color:var(--ac);}
 .rl-ac:hover{background:rgba(240,165,0,.2);}
@@ -1294,7 +1297,7 @@ TWIN_PAGE = """
 .vb.on{background:var(--acd);color:var(--ac);border-color:var(--ac);z-index:1;}
 .live{display:flex;align-items:center;gap:5px;padding:3px 8px;background:var(--okd);border:1px solid var(--ok);border-radius:2px;font-size:9.5px;font-weight:700;color:var(--ok);font-family:'Space Mono',monospace;letter-spacing:1px;}
 .ld{width:5px;height:5px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite;}
-.tt{position:fixed;z-index:300;pointer-events:none;background:var(--s1);border:1px solid var(--b2);border-radius:3px;padding:8px 12px;font-size:11px;color:var(--tx);font-family:'Space Mono',monospace;box-shadow:0 4px 20px rgba(0,0,0,0.4);opacity:0;transition:opacity 0.15s;white-space:nowrap;}
+.tt{position:fixed;z-index:300;pointer-events:none;background:var(--s1);border:1px solid var(--b2);border-radius:3px;padding:8px 12px;font-size:11px;color:var(--tx);font-family:'Space Mono',monospace;box-shadow:0 4px 20px rgba(0,0,0,0.6);opacity:0;transition:opacity 0.15s;white-space:nowrap;}
 .tt.show{opacity:1;}
 .tt-nm{font-weight:700;margin-bottom:4px;font-size:12px;}
 .tt-r{display:flex;justify-content:space-between;gap:16px;font-size:10px;color:var(--t3);margin-bottom:2px;}
@@ -1303,12 +1306,12 @@ TWIN_PAGE = """
 .tt-ok{background:var(--okd);color:var(--ok);}
 .tt-wn{background:var(--wnd);color:var(--wn);}
 .tt-dn{background:var(--dnd);color:var(--dn);}
-.hl{position:fixed;z-index:299;pointer-events:none;background:var(--s1);border:1px solid var(--b1);border-radius:2px;padding:3px 8px;font-size:9.5px;color:var(--t2);font-family:'Space Mono',monospace;opacity:0;transition:opacity 0.12s;white-space:nowrap;letter-spacing:0.5px;}
+.hl{position:fixed;z-index:299;pointer-events:none;background:rgba(15,15,15,0.9);border:1px solid var(--b1);border-radius:2px;padding:3px 8px;font-size:9.5px;color:var(--t2);font-family:'Space Mono',monospace;opacity:0;transition:opacity 0.12s;white-space:nowrap;letter-spacing:0.5px;}
 .hl.show{opacity:1;}
 .rpl{position:fixed;pointer-events:none;z-index:299;width:36px;height:36px;border-radius:50%;border:1px solid var(--ac);transform:translate(-50%,-50%) scale(0);animation:rpl 0.45s ease-out forwards;}
 @keyframes rpl{0%{transform:translate(-50%,-50%) scale(0);opacity:1}100%{transform:translate(-50%,-50%) scale(2.5);opacity:0}}
 .ch2{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);display:flex;gap:7px;pointer-events:none;z-index:5;}
-.ck{display:flex;align-items:center;gap:4px;background:var(--s1);border:1px solid var(--b1);padding:3px 8px;border-radius:2px;font-size:9px;color:var(--t3);letter-spacing:1px;font-family:'Space Mono',monospace;}
+.ck{display:flex;align-items:center;gap:4px;background:rgba(15,15,15,0.8);border:1px solid var(--b1);padding:3px 8px;border-radius:2px;font-size:9px;color:var(--t3);letter-spacing:1px;font-family:'Space Mono',monospace;}
 .ck kbd{background:var(--s2);border:1px solid var(--b2);padding:1px 5px;border-radius:2px;font-size:8px;color:var(--ac);}
 </style>
 
@@ -1379,24 +1382,17 @@ TWIN_PAGE = """
 </div>
 
 <script>
-// Machine data matching the 3 real machines
 const MD={
   'M001':{name:'Drill Press Alpha',  type:'DRILLING', st:'ok', temp:'64°C', vib:'0.4', load:'65', eff:'89', h:88, rul:440, oee:85, hc:'#00b894'},
   'M002':{name:'Assembly Line Beta', type:'ASSEMBLY', st:'ok', temp:'61°C', vib:'0.3', load:'58', eff:'92', h:91, rul:460, oee:88, hc:'#00b894'},
   'M003':{name:'Weld Station Gamma', type:'WELDING',  st:'ok', temp:'67°C', vib:'0.5', load:'70', eff:'86', h:84, rul:420, oee:82, hc:'#00b894'},
 };
-
 let selId='M001';
 
 function upPanel(id){
-  const d=MD[id]; if(!d) return;
-  selId=id;
+  const d=MD[id]; if(!d)return; selId=id;
   document.getElementById('bbS').textContent=id;
-  ['rb-t','rb-v','rb-r','rb-l'].forEach(b=>{
-    const el=document.getElementById(b);
-    el.classList.add('flash');
-    setTimeout(()=>el.classList.remove('flash'),600);
-  });
+  ['rb-t','rb-v','rb-r','rb-l'].forEach(b=>{const el=document.getElementById(b);el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),600);});
   document.getElementById('rpId').textContent='MACHINE ID: '+id;
   document.getElementById('rpNm').textContent=d.name;
   const sb=document.getElementById('rpSt');
@@ -1407,146 +1403,70 @@ function upPanel(id){
   document.getElementById('rpR').innerHTML=d.load+'<span style="font-size:9px">%</span>';
   document.getElementById('rpL').innerHTML=d.eff+'<span style="font-size:9px">%</span>';
   document.getElementById('rpHv').textContent=d.h+'%';
-  const hb=document.getElementById('rpHb'); hb.style.width=d.h+'%'; hb.style.background=d.hc;
+  const hb=document.getElementById('rpHb');hb.style.width=d.h+'%';hb.style.background=d.hc;
   document.getElementById('rpRv').textContent=d.rul+' hrs';
   document.getElementById('rpRb').style.width=Math.min(100,d.rul/5)+'%';
   document.getElementById('rpWv').textContent=d.oee+'%';
-  const wb=document.getElementById('rpWb'); wb.style.width=d.oee+'%';
+  const wb=document.getElementById('rpWb');wb.style.width=d.oee+'%';
   wb.style.background=d.oee>=80?'#00b894':d.oee>=60?'#f0a500':'#d63031';
 }
 
 function snapV(mode,btn){
-  document.querySelectorAll('.vb').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
-  if(mode==='persp'){cam.rx=0.42;cam.ry=0.5;cam.dist=14;cam.px=0;cam.py=0;}
-  if(mode==='top')  {cam.rx=-1.56;cam.ry=0;cam.dist=18;cam.px=0;cam.py=0;}
-  if(mode==='front'){cam.rx=0.01;cam.ry=0;cam.dist=16;cam.px=0;cam.py=0;}
-  if(mode==='side') {cam.rx=0.25;cam.ry=1.57;cam.dist=16;cam.px=0;cam.py=0;}
+  document.querySelectorAll('.vb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+  if(mode==='persp'){tgt.rx=0.38;tgt.ry=0.55;tgt.dist=16;tgt.px=0;tgt.py=0;}
+  if(mode==='top')  {tgt.rx=-1.55;tgt.ry=0;tgt.dist=20;tgt.px=0;tgt.py=0;}
+  if(mode==='front'){tgt.rx=0.02;tgt.ry=0;tgt.dist=18;tgt.px=0;tgt.py=0;}
+  if(mode==='side') {tgt.rx=0.25;tgt.ry=1.57;tgt.dist=18;tgt.px=0;tgt.py=0;}
   document.getElementById('bbV').textContent=mode.toUpperCase();
 }
 
+// ── WebGL setup ──────────────────────────────────────────────────────────────
 const canvas=document.getElementById('twc');
-function resize(){const w=canvas.parentElement;canvas.width=w.clientWidth;canvas.height=w.clientHeight;}
-resize(); window.addEventListener('resize',resize);
+function resize(){canvas.width=canvas.parentElement.clientWidth;canvas.height=canvas.parentElement.clientHeight;}
+resize();window.addEventListener('resize',resize);
 
-const gl=canvas.getContext('webgl')||canvas.getContext('experimental-webgl');
-const VS='attribute vec3 aP;attribute vec3 aC;uniform mat4 uM;varying vec3 vC;void main(){gl_Position=uM*vec4(aP,1.0);vC=aC;}';
-const FS='precision mediump float;varying vec3 vC;void main(){gl_FragColor=vec4(vC,1.0);}';
+const gl=canvas.getContext('webgl',{antialias:true})||canvas.getContext('experimental-webgl');
+
+// Main shader — position + color + brightness for fake lighting
+const VS=`
+attribute vec3 aP;
+attribute vec3 aC;
+attribute float aB;
+uniform mat4 uMVP;
+uniform float uTime;
+uniform vec3 uLightPos;
+varying vec3 vC;
+varying float vB;
+void main(){
+  gl_Position=uMVP*vec4(aP,1.0);
+  vC=aC;
+  vB=aB;
+}`;
+const FS=`
+precision mediump float;
+varying vec3 vC;
+varying float vB;
+uniform vec3 uGlow;
+uniform float uGlowStr;
+void main(){
+  vec3 c=vC*vB;
+  c=mix(c,uGlow,uGlowStr*0.18);
+  gl_FragColor=vec4(c,1.0);
+}`;
+
 function mkS(src,t){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s;}
 const prog=gl.createProgram();
 gl.attachShader(prog,mkS(VS,gl.VERTEX_SHADER));
 gl.attachShader(prog,mkS(FS,gl.FRAGMENT_SHADER));
-gl.linkProgram(prog); gl.useProgram(prog);
-const locP=gl.getAttribLocation(prog,'aP'),locC=gl.getAttribLocation(prog,'aC'),locM=gl.getUniformLocation(prog,'uM');
+gl.linkProgram(prog);gl.useProgram(prog);
+const aP=gl.getAttribLocation(prog,'aP');
+const aC=gl.getAttribLocation(prog,'aC');
+const aB=gl.getAttribLocation(prog,'aB');
+const uMVP=gl.getUniformLocation(prog,'uMVP');
+const uGlow=gl.getUniformLocation(prog,'uGlow');
+const uGlowStr=gl.getUniformLocation(prog,'uGlowStr');
 
-const vP=[],vC2=[]; const mb=[];
-
-function box(cx,cy,cz,w,h,d,r,g,b,mid=null){
-  if(mid) mb.push({id:mid,cx,cy:cy+h/2,cz,hw:w/2,hh:h/2,hd:d/2});
-  const x0=cx-w/2,x1=cx+w/2,y0=cy,y1=cy+h,z0=cz-d/2,z1=cz+d/2;
-  const F=[x0,y0,z1,x1,y0,z1,x1,y1,z1,x0,y0,z1,x1,y1,z1,x0,y1,z1,
-           x1,y0,z0,x0,y0,z0,x0,y1,z0,x1,y0,z0,x0,y1,z0,x1,y1,z0,
-           x0,y0,z0,x0,y0,z1,x0,y1,z1,x0,y0,z0,x0,y1,z1,x0,y1,z0,
-           x1,y0,z1,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z0,x1,y1,z1,
-           x0,y1,z1,x1,y1,z1,x1,y1,z0,x0,y1,z1,x1,y1,z0,x0,y1,z0,
-           x0,y0,z0,x1,y0,z0,x1,y0,z1,x0,y0,z0,x1,y0,z1,x0,y0,z1];
-  const bri=[0.78,0.62,0.56,0.56,1.0,0.22];
-  for(let f=0;f<6;f++){const bv=bri[f];for(let v=0;v<6;v++){const i=(f*6+v)*3;vP.push(F[i],F[i+1],F[i+2]);vC2.push(r*bv,g*bv,b*bv);}}
-}
-
-// Floor tiles
-for(let x=-7;x<7;x+=0.7) for(let z=-7;z<7;z+=0.7){
-  vP.push(x,0,z,x+.7,0,z,x,0,z+.7,x+.7,0,z,x+.7,0,z+.7,x,0,z+.7);
-  const cv=(Math.round(x/.7)+Math.round(z/.7))%2===0?.065:.048;
-  for(let i=0;i<6;i++) vC2.push(cv*1.05,cv,cv*.9);
-}
-
-// Structural columns
-const SC=[.07,.065,.055];
-box(-6,0,-6,.25,4,.25,...SC); box(6,0,-6,.25,4,.25,...SC);
-box(-6,0,6,.25,4,.25,...SC);  box(6,0,6,.25,4,.25,...SC);
-// Roof beams
-box(0,4,-6,13,.08,.18,...SC); box(0,4,6,13,.08,.18,...SC);
-box(-6,4,0,.18,.08,13,...SC); box(6,4,0,.18,.08,13,...SC);
-box(0,4,0,13,.08,.1,...SC);
-
-// Overhead crane rail
-box(0,3.6,0,12,.12,.12,.18,.18,.22);
-
-// === MACHINE M001: Drill Press Alpha ===
-// Main column body
-box(-3.5,0,0,.9,2.8,.9,.12,.38,.78,'M001');
-// Top head (horizontal arm)
-box(-3.0,2.8,0,1.8,.35,.7,.10,.30,.65);
-// Drill spindle hanging down
-box(-2.5,1.2,0,.18,1.6,.18,.15,.45,.85);
-// Drill bit tip
-box(-2.5,0.8,0,.12,.45,.12,.22,.55,.88);
-// Base plate
-box(-3.5,-0.02,0,1.4,.08,1.2,.08,.25,.55);
-// Control panel on side
-box(-4.1,1.2,0,.12,.6,.5,.55,.50,.12);
-// Small detail: coolant nozzle
-box(-2.5,1.6,.25,.05,.3,.05,.4,.7,.9);
-
-// === MACHINE M002: Assembly Line Beta ===
-// Long conveyor frame
-box(1.5,0,0,3.8,.2,1.0,.45,.22,.08,'M002');
-// Conveyor belt surface
-box(1.5,.2,0,3.8,.06,.85,.35,.18,.06);
-// Support legs
-box(0.2,0,0,.12,.2,.9,.3,.15,.05);
-box(1.5,0,0,.12,.2,.9,.3,.15,.05);
-box(2.8,0,0,.12,.2,.9,.3,.15,.05);
-// Robot arm above conveyor
-box(1.5,.26,-.2,.1,1.2,.1,.55,.42,.08);
-box(1.5,1.46,-.2,.8,.1,.1,.55,.42,.08);
-box(2.3,1.26,-.2,.1,.22,.1,.55,.42,.08);
-// Pick end effector
-box(2.3,1.06,-.2,.25,.08,.2,.7,.55,.1);
-// Control terminal
-box(0.0,.0,-.7,.4,1.1,.35,.18,.17,.28);
-box(0.0,1.1,-.7,.38,.5,.32,.14,.13,.24);
-// Parts bin
-box(3.0,.0,.55,.5,.35,.4,.22,.20,.18);
-
-// === MACHINE M003: Weld Station Gamma ===
-// Welding table
-box(-1.5,0,3.5,1.4,.12,1.2,.3,.28,.26,'M003');
-// Table legs
-box(-2.1,0,3.0,.1,.7,.1,.22,.20,.18); box(-0.9,0,3.0,.1,.7,.1,.22,.20,.18);
-box(-2.1,0,4.0,.1,.7,.1,.22,.20,.18); box(-0.9,0,4.0,.1,.7,.1,.22,.20,.18);
-// Welding robot arm base
-box(-1.5,.12,3.5,.35,1.0,.35,.45,.22,.08);
-// Robot arm segment 1
-box(-1.5,1.12,3.5,.12,.9,.12,.55,.28,.1);
-// Robot arm segment 2 (angled)
-box(-1.2,1.9,3.3,.12,.7,.12,.55,.28,.1);
-// Weld torch
-box(-1.05,2.5,3.2,.06,.4,.06,.7,.65,.15);
-// Weld flash (bright yellow)
-box(-1.05,2.45,3.2,.15,.08,.15,.95,.85,.1);
-// Welding shield/shroud
-box(-1.5,.12,2.9,.6,.8,.08,.18,.16,.14);
-// Fume extractor hose
-box(-2.0,1.5,3.5,.08,.8,.08,.25,.24,.22);
-box(-2.0,2.3,3.5,.5,.08,.08,.25,.24,.22);
-// Gas cylinder
-box(-2.4,0,3.5,.22,1.1,.22,.35,.34,.36);
-box(-2.4,1.1,3.5,.24,.12,.24,.45,.44,.46);
-
-// Safety barriers between machines
-box(-0.5,0,0,.08,.55,2.5,.55,.42,.05);
-box(0.5,0,0,.08,.55,2.5,.55,.42,.05);
-// Yellow floor markings (flat boxes)
-box(-3.5,0.01,0,2.2,.01,2.2,.9,.75,.05);
-box(1.5,0.01,0,4.5,.01,1.8,.9,.75,.05);
-box(-1.5,0.01,3.5,2.2,.01,2.0,.9,.75,.05);
-
-const bufP=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,bufP); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vP),gl.STATIC_DRAW);
-const bufC3=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,bufC3); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vC2),gl.STATIC_DRAW);
-const NV=vP.length/3;
-
-// Highlight shader
+// Highlight wireframe shader
 const hp=gl.createProgram();
 function mkS2(src,t){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s;}
 gl.attachShader(hp,mkS2('attribute vec3 aP;uniform mat4 uM;void main(){gl_Position=uM*vec4(aP,1.0);}',gl.VERTEX_SHADER));
@@ -1555,13 +1475,289 @@ gl.linkProgram(hp);
 const hlP=gl.getAttribLocation(hp,'aP'),hlM=gl.getUniformLocation(hp,'uM'),hlC=gl.getUniformLocation(hp,'uC');
 const hlBuf=gl.createBuffer();
 
-function wbox(cx,cy,cz,w,h,d,p=0.08){
-  const x0=cx-w/2-p,x1=cx+w/2+p,y0=cy-p,y1=cy+h+p,z0=cz-d/2-p,z1=cz+d/2+p;
-  return new Float32Array([x0,y0,z0,x1,y0,z0,x1,y0,z0,x1,y0,z1,x1,y0,z1,x0,y0,z1,x0,y0,z1,x0,y0,z0,
-    x0,y1,z0,x1,y1,z0,x1,y1,z0,x1,y1,z1,x1,y1,z1,x0,y1,z1,x0,y1,z1,x0,y1,z0,
-    x0,y0,z0,x0,y1,z0,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z1,x0,y0,z1,x0,y1,z1]);
+// ── Geometry builder ──────────────────────────────────────────────────────────
+const vPos=[],vCol=[],vBri=[];
+const mb=[];  // machine bounding boxes for raycasting
+const dynMeshes={}; // animated mesh vertex ranges
+
+function face(verts,r,g,b,bright){
+  // verts = 6 vertices (2 triangles) each [x,y,z]
+  for(let v of verts){vPos.push(...v);vCol.push(r,g,b);vBri.push(bright);}
 }
 
+function box(cx,cy,cz,w,h,d,r,g,b,mid=null,bright_override=null){
+  if(mid) mb.push({id:mid,cx,cy:cy+h/2,cz,hw:w/2,hh:h/2,hd:d/2});
+  const x0=cx-w/2,x1=cx+w/2,y0=cy,y1=cy+h,z0=cz-d/2,z1=cz+d/2;
+  // face brightness: front,back,left,right,top,bottom
+  const br=bright_override||[0.75,0.55,0.6,0.65,1.0,0.25];
+  // front
+  face([[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y0,z1],[x1,y1,z1],[x0,y1,z1]],r,g,b,br[0]);
+  // back
+  face([[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y0,z0],[x0,y1,z0],[x1,y1,z0]],r,g,b,br[1]);
+  // left
+  face([[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y0,z0],[x0,y1,z1],[x0,y1,z0]],r,g,b,br[2]);
+  // right
+  face([[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y0,z1],[x1,y1,z0],[x1,y1,z1]],r,g,b,br[3]);
+  // top
+  face([[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z1],[x1,y1,z0],[x0,y1,z0]],r,g,b,br[4]);
+  // bottom
+  face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z0],[x1,y0,z1],[x0,y0,z1]],r,g,b,br[5]);
+}
+
+// floor tiles
+for(let x=-8;x<8;x+=0.8) for(let z=-8;z<8;z+=0.8){
+  const c=(Math.round(x/.8)+Math.round(z/.8))%2===0?.06:.044;
+  face([[x,0,z],[x+.8,0,z],[x,.0,z+.8],[x+.8,0,z],[x+.8,0,z+.8],[x,0,z+.8]],c*1.05,c,c*.9,1.0);
+}
+// floor yellow safety lines
+const sl=[[-4.5,0,-4.5,5.5,.02,.05],[-4.5,0,4.5,5.5,.02,.05],[5.0,0,-4.5,.05,.02,9]];
+for(const [cx,cy,cz,w,h,d] of sl) box(cx,cy,cz,w,h,d,.7,.6,.02);
+
+// structural columns
+const SC=[.07,.06,.05];
+for(const [cx,cz] of [[-7,-7],[7,-7],[-7,7],[7,7],[-7,0],[7,0],[0,-7],[0,7]]){
+  box(cx,0,cz,.3,4.5,.3,...SC);
+}
+// roof beams
+box(0,4.5,0,15,.1,.15,...SC);box(0,4.5,-7,15,.1,.15,...SC);box(0,4.5,7,15,.1,.15,...SC);
+box(-7,4.5,0,.15,.1,15,...SC);box(7,4.5,0,.15,.1,15,...SC);
+// ceiling panels (dark)
+for(let x=-3;x<3;x++) for(let z=-3;z<3;z++){
+  box(x*2.3,4.4,z*2.3,2.2,.05,2.2,.05,.05,.06);
+}
+// overhead crane beam
+box(0,3.8,0,13,.15,.2,.2,.2,.25);
+box(-5,3.65,0,.2,.15,.35,.25,.25,.3);
+box(5,3.65,0,.2,.15,.35,.25,.25,.3);
+
+// walls (far, faint)
+box(0,2.2,-8,16,.05,4.4,.06,.06,.07);
+box(0,2.2,8,16,.05,4.4,.06,.06,.07);
+box(-8,2.2,0,4.4,.05,16,.06,.06,.07);
+box(8,2.2,0,4.4,.05,16,.06,.06,.07);
+
+// ── MACHINE M001: Drill Press Alpha ──────────────────────────────────────────
+mb.push({id:'M001',cx:-4,cy:1.5,cz:-2.5,hw:1.2,hh:1.5,hd:1.2}); // bounding box for click
+// base plate
+box(-4,0,-2.5,2.0,.12,1.8,.12,.12,.18);
+// column
+box(-4,.12,-2.5,.55,2.6,.55,.16,.38,.75);
+// motor housing on top
+box(-4,2.72,-2.5,.75,.5,.65,.12,.28,.62);
+// horizontal arm
+box(-3.1,2.6,-2.5,1.6,.28,.5,.10,.26,.58);
+// quill housing (static outer)
+box(-2.45,1.4,-2.5,.32,1.25,.32,.18,.42,.82);
+// control panel
+box(-4.75,1.2,-2.5,.12,.7,.55,.5,.45,.1);
+box(-4.75,1.55,-2.4,.12,.02,.3,.6,.55,.15);
+// base vise
+box(-3.8,.12,-2.5,1.2,.25,1.0,.22,.22,.28);
+box(-3.3,.37,-2.5,.5,.18,.6,.3,.3,.38);
+// coolant tank
+box(-5.0,.0,-2.0,.35,.55,.35,.05,.25,.45);
+// depth stop
+box(-2.45,2.55,-2.5,.08,.2,.08,.7,.6,.1);
+
+// DYNAMIC: drill spindle (animated up/down)
+dynMeshes.drill={start:vPos.length/3};
+box(-2.45,0.6,-2.5,.18,.85,.18,.22,.55,.95); // placeholder, overwritten in animation
+dynMeshes.drill.end=vPos.length/3;
+// drill bit
+dynMeshes.drillBit={start:vPos.length/3};
+box(-2.45,0.35,-2.5,.1,.3,.1,.6,.7,.9);
+dynMeshes.drillBit.end=vPos.length/3;
+
+// ── MACHINE M002: Assembly Line Beta ─────────────────────────────────────────
+mb.push({id:'M002',cx:1.5,cy:0.5,cz:0,hw:2.5,hh:0.5,hd:0.8});
+// frame sides
+box(-1.2,0,-.55,3.8,.18,.12,.45,.22,.08);
+box(-1.2,0, .55,3.8,.18,.12,.45,.22,.08);
+// end rollers
+box(-1.2,.18,0,.12,.22,.9,.55,.28,.1);
+box( 3.8,.18,0,.12,.22,.9,.55,.28,.1);
+// cross supports
+for(let xi=-1;xi<4;xi++){box(xi*.9+0.1,.0,0,.08,.18,.8,.35,.18,.06);}
+// belt surface (static base)
+box(1.3,.18,0,5.2,.06,.82,.3,.2,.08);
+// guide rails
+box(1.3,.24,-.44,5.2,.1,.04,.5,.35,.1);
+box(1.3,.24, .44,5.2,.1,.04,.5,.35,.1);
+// DYNAMIC: belt panels (animated sliding)
+dynMeshes.belt={start:vPos.length/3,panels:[]};
+for(let i=0;i<8;i++){
+  dynMeshes.belt.panels.push(vPos.length/3);
+  box(-1.0+i*0.62,.22,0,.55,.04,.78,.28,.22,.1,[.9,.9,.7,.7,1.0,.4]);
+}
+dynMeshes.belt.end=vPos.length/3;
+// DYNAMIC: parts on belt
+dynMeshes.parts={start:vPos.length/3};
+for(let i=0;i<4;i++){
+  box(-0.5+i*1.2,.28,0,.3,.22,.3,.85,.7,.15);
+}
+dynMeshes.parts.end=vPos.length/3;
+// robot arm (static base tower)
+box( 3.2,.18,-.5,.3,1.4,.3,.45,.2,.06);
+// DYNAMIC: robot arm (animated rotation/swing)
+dynMeshes.armBase={start:vPos.length/3};
+box(3.2,1.58,-.5,.15,.8,.15,.55,.25,.08);
+dynMeshes.armBase.end=vPos.length/3;
+dynMeshes.armFore={start:vPos.length/3};
+box(3.2,2.35,-.2,.12,.6,.12,.55,.25,.08);
+dynMeshes.armFore.end=vPos.length/3;
+// gripper
+dynMeshes.gripper={start:vPos.length/3};
+box(3.2,2.9,-.05,.25,.08,.2,.8,.6,.1);
+box(3.1,2.98,-.05,.06,.12,.06,.7,.5,.08);
+box(3.3,2.98,-.05,.06,.12,.06,.7,.5,.08);
+dynMeshes.gripper.end=vPos.length/3;
+// control cabinet
+box(-1.8,.0,-.8,.45,1.2,.35,.18,.17,.28);
+box(-1.8,1.2,-.8,.43,.5,.33,.14,.13,.24);
+box(-1.75,1.35,-.65,.06,.2,.18,.1,.55,.85);
+// parts in-feed bin
+box(-1.0,.0,.75,.6,.4,.5,.22,.20,.18);
+box(-1.0,.4,.75,.62,.05,.52,.3,.28,.24);
+// out-feed chute
+box(4.2,.0,0,.4,.4,.6,.25,.22,.2);
+box(4.5,.0,0,.3,.35,.55,.22,.2,.18);
+
+// ── MACHINE M003: Weld Station Gamma ─────────────────────────────────────────
+mb.push({id:'M003',cx:-1.5,cy:1.0,cz:4.5,hw:1.5,hh:1.0,hd:1.5});
+// welding table
+box(-1.5,.0,4.5,2.2,.12,2.0,.28,.26,.24);
+// table legs
+for(const [tx,tz] of [[-2.4,3.7],[-0.6,3.7],[-2.4,5.3],[-0.6,5.3]]){
+  box(tx,0,tz,.1,.75,.1,.2,.19,.18);
+}
+// robot base
+box(-1.5,.12,4.5,.45,1.1,.45,.4,.2,.06);
+// robot lower arm
+dynMeshes.weldArm1={start:vPos.length/3};
+box(-1.5,1.22,4.5,.16,1.0,.16,.5,.25,.08);
+dynMeshes.weldArm1.end=vPos.length/3;
+// robot upper arm
+dynMeshes.weldArm2={start:vPos.length/3};
+box(-1.2,2.18,4.3,.14,.75,.14,.5,.25,.08);
+dynMeshes.weldArm2.end=vPos.length/3;
+// wrist
+dynMeshes.weldWrist={start:vPos.length/3};
+box(-1.0,2.88,4.18,.18,.12,.18,.55,.28,.1);
+dynMeshes.weldWrist.end=vPos.length/3;
+// torch
+dynMeshes.torch={start:vPos.length/3};
+box(-1.0,2.75,4.05,.06,.45,.06,.6,.58,.55);
+box(-1.0,2.45,3.98,.05,.32,.05,.55,.52,.5);
+dynMeshes.torch.end=vPos.length/3;
+// workpiece on table
+box(-1.5,.12,4.5,.6,.3,.5,.4,.38,.35);
+box(-1.5,.42,4.5,.55,.08,.45,.5,.48,.44);
+// gas cylinder
+box(-2.65,0,4.5,.25,1.2,.25,.32,.30,.34);
+box(-2.65,1.2,4.5,.27,.12,.27,.42,.40,.44);
+// hose
+box(-2.52,.6,4.5,.13,.02,.02,.45,.42,.4);
+box(-2.52,.6,4.3,.02,.02,.25,.45,.42,.4);
+// welding screen
+box(-1.5,.12,3.55,2.0,.95,.06,.12,.1,.08);
+box(-1.5,.12,5.45,2.0,.95,.06,.12,.1,.08);
+// fume extractor
+box(-2.6,2.2,4.5,.12,.8,.12,.22,.21,.2);
+box(-2.3,3.0,4.5,.6,.1,.1,.22,.21,.2);
+box(-1.7,3.0,4.5,.1,.5,.1,.22,.21,.2);
+// control pendant
+box(-0.3,.0,3.4,.25,.9,.2,.16,.15,.22);
+box(-0.3,.9,3.4,.23,.35,.18,.13,.12,.18);
+
+// safety barriers
+box(-0.2,0,-0.5,.08,.6,5.5,.55,.42,.05);
+box( 3.3,0,-0.8,.08,.6,1.5,.55,.42,.05);
+box(-3.2,0,2.5,.08,.6,5.5,.55,.42,.05);
+// floor markings
+box(-4.0,.005,-2.5,3.2,.005,3.0,.85,.70,.02);
+box( 1.3,.005,0.0,5.5,.005,1.8,.85,.70,.02);
+box(-1.5,.005,4.5,3.2,.005,3.2,.85,.70,.02);
+
+// Upload static geometry to GPU
+const STATIC_END=vPos.length/3;
+
+const bufP=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,bufP);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vPos),gl.DYNAMIC_DRAW);
+
+const bufC=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,bufC);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vCol),gl.DYNAMIC_DRAW);
+
+const bufB=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,bufB);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vBri),gl.DYNAMIC_DRAW);
+
+const NV=vPos.length/3;
+
+// ── Particles ─────────────────────────────────────────────────────────────────
+const MAX_P=600;
+const pPos=new Float32Array(MAX_P*3);
+const pCol=new Float32Array(MAX_P*3);
+const pVel=new Float32Array(MAX_P*3);
+const pLife=new Float32Array(MAX_P);
+const pMaxLife=new Float32Array(MAX_P);
+const pType=new Uint8Array(MAX_P); // 0=spark 1=smoke 2=chip 3=steam
+
+const pBufP=gl.createBuffer();
+const pBufC=gl.createBuffer();
+
+// Particle shader
+const pProg=gl.createProgram();
+gl.attachShader(pProg,mkS2('attribute vec3 aP;attribute vec3 aC;uniform mat4 uM;varying vec3 vC;void main(){gl_Position=uM*vec4(aP,1.0);gl_PointSize=max(1.0,4.0-gl_Position.z*0.3);vC=aC;}',gl.VERTEX_SHADER));
+gl.attachShader(pProg,mkS2('precision mediump float;varying vec3 vC;void main(){float d=length(gl_PointCoord-0.5)*2.0;if(d>1.0)discard;gl_FragColor=vec4(vC,1.0-d*0.5);}',gl.FRAGMENT_SHADER));
+gl.linkProgram(pProg);
+const ppP=gl.getAttribLocation(pProg,'aP'),ppC=gl.getAttribLocation(pProg,'aC'),ppM=gl.getUniformLocation(pProg,'uM');
+
+function spawnParticle(x,y,z,type){
+  for(let i=0;i<MAX_P;i++){
+    if(pLife[i]<=0){
+      const idx=i*3;
+      pPos[idx]=x;pPos[idx+1]=y;pPos[idx+2]=z;
+      pType[i]=type;
+      if(type===0){ // spark — weld arc
+        const a=Math.random()*Math.PI*2, s=Math.random()*0.06+0.02;
+        pVel[idx]=(Math.cos(a)*s+(Math.random()-.5)*.04);
+        pVel[idx+1]=Math.random()*0.12+0.04;
+        pVel[idx+2]=(Math.sin(a)*s+(Math.random()-.5)*.04);
+        pLife[i]=0.4+Math.random()*0.5;
+        pCol[idx]=0.95+Math.random()*.05;
+        pCol[idx+1]=0.6+Math.random()*.35;
+        pCol[idx+2]=0.05+Math.random()*.1;
+      }else if(type===1){ // smoke
+        pVel[idx]=(Math.random()-.5)*.008;
+        pVel[idx+1]=Math.random()*.025+0.01;
+        pVel[idx+2]=(Math.random()-.5)*.008;
+        pLife[i]=1.5+Math.random()*2.0;
+        const g=0.18+Math.random()*.12;
+        pCol[idx]=g;pCol[idx+1]=g;pCol[idx+2]=g*1.1;
+      }else if(type===2){ // metal chip — drill
+        const a=Math.random()*Math.PI*2,s=0.04+Math.random()*.06;
+        pVel[idx]=Math.cos(a)*s;
+        pVel[idx+1]=Math.random()*.08+0.02;
+        pVel[idx+2]=Math.sin(a)*s;
+        pLife[i]=0.5+Math.random()*.4;
+        pCol[idx]=0.7+Math.random()*.2;pCol[idx+1]=0.5+Math.random()*.2;pCol[idx+2]=0.1;
+      }else{ // steam
+        pVel[idx]=(Math.random()-.5)*.012;
+        pVel[idx+1]=Math.random()*.035+0.015;
+        pVel[idx+2]=(Math.random()-.5)*.012;
+        pLife[i]=0.8+Math.random()*1.0;
+        const g=0.55+Math.random()*.2;
+        pCol[idx]=g;pCol[idx+1]=g;pCol[idx+2]=g;
+      }
+      pMaxLife[i]=pLife[i];
+      break;
+    }
+  }
+}
+
+// ── Math helpers ──────────────────────────────────────────────────────────────
 function mul4(a,b){const o=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){o[j*4+i]=0;for(let k=0;k<4;k++)o[j*4+i]+=a[k*4+i]*b[j*4+k];}return o;}
 function mP(fov,asp,n,f){const t=1/Math.tan(fov/2),o=new Float32Array(16);o[0]=t/asp;o[5]=t;o[10]=(f+n)/(n-f);o[11]=-1;o[14]=2*f*n/(n-f);return o;}
 function mRX(a){const c=Math.cos(a),s=Math.sin(a),o=new Float32Array(16);o[0]=1;o[5]=c;o[6]=-s;o[9]=s;o[10]=c;o[15]=1;return o;}
@@ -1587,15 +1783,15 @@ function invM(m){
   v[11]=-m[0]*m[5]*m[11]+m[0]*m[7]*m[9]+m[4]*m[1]*m[11]-m[4]*m[3]*m[9]-m[8]*m[1]*m[7]+m[8]*m[3]*m[5];
   v[15]=m[0]*m[5]*m[10]-m[0]*m[6]*m[9]-m[4]*m[1]*m[10]+m[4]*m[2]*m[9]+m[8]*m[1]*m[6]-m[8]*m[2]*m[5];
   const det=m[0]*v[0]+m[1]*v[4]+m[2]*v[8]+m[3]*v[12];
-  if(Math.abs(det)<1e-8) return null;
-  const di=1/det; for(let i=0;i<16;i++) v[i]*=di; return v;
+  if(Math.abs(det)<1e-8)return null;
+  const di=1/det;for(let i=0;i<16;i++)v[i]*=di;return v;
 }
 
 function ray(mx,my,mvp){
   const nx=(mx/canvas.width)*2-1,ny=1-(my/canvas.height)*2;
-  const iv=invM(mvp); if(!iv) return null;
+  const iv=invM(mvp);if(!iv)return null;
   function up(x,y,z){const v=[x,y,z,1],r=[0,0,0,0];for(let i=0;i<4;i++)for(let j=0;j<4;j++)r[i]+=iv[j*4+i]*v[j];if(Math.abs(r[3])<1e-8)return null;return[r[0]/r[3],r[1]/r[3],r[2]/r[3]];}
-  const nr=up(nx,ny,-1),fr=up(nx,ny,1); if(!nr||!fr) return null;
+  const nr=up(nx,ny,-1),fr=up(nx,ny,1);if(!nr||!fr)return null;
   const dx=fr[0]-nr[0],dy=fr[1]-nr[1],dz=fr[2]-nr[2],l=Math.sqrt(dx*dx+dy*dy+dz*dz);
   return{ox:nr[0],oy:nr[1],oz:nr[2],dx:dx/l,dy:dy/l,dz:dz/l};
 }
@@ -1605,20 +1801,59 @@ function rayAABB(r,b){
   const tz0=(b.cz-b.hd-r.oz)/r.dz,tz1=(b.cz+b.hd-r.oz)/r.dz;
   const tmin=Math.max(Math.min(tx0,tx1),Math.min(ty0,ty1),Math.min(tz0,tz1));
   const tmax=Math.min(Math.max(tx0,tx1),Math.max(ty0,ty1),Math.max(tz0,tz1));
-  if(tmax<0||tmin>tmax) return Infinity; return tmin>0?tmin:tmax;
+  return(tmax>=0&&tmin<=tmax)?tmin>0?tmin:tmax:Infinity;
 }
 function pickM(mx,my){
-  const r=ray(mx,my,curMVP); if(!r) return null;
+  const r=ray(mx,my,curMVP);if(!r)return null;
   let cl=null,ct=Infinity;
   for(const b of mb){const t=rayAABB(r,b);if(t<ct){ct=t;cl=b;}}
   return ct<100?cl:null;
 }
 
+// ── Camera ────────────────────────────────────────────────────────────────────
+const cam={rx:0.38,ry:0.55,dist:17,px:0,py:0};
+const tgt={rx:0.38,ry:0.55,dist:17,px:0,py:0};
+let curMVP=new Float32Array(16);
+let drag=false,sh=false,lx=0,ly=0;
+let autoOrbit=true,autoOrbitTimer=0;
+
+canvas.addEventListener('mousedown',e=>{drag=true;sh=e.shiftKey;lx=e.clientX;ly=e.clientY;autoOrbit=false;e.preventDefault();});
+window.addEventListener('mouseup',e=>{
+  const dx2=Math.abs(e.clientX-lx),dy2=Math.abs(e.clientY-ly);
+  if(drag&&dx2<5&&dy2<5){
+    const rect=canvas.getBoundingClientRect();
+    const hit=pickM(e.clientX-rect.left,e.clientY-rect.top);
+    if(hit){
+      upPanel(hit.id);showTT(hit.id,e.clientX,e.clientY);doRpl(e.clientX,e.clientY);
+      // Fly camera toward selected machine
+      const pos={M001:{px:-1.5,py:-.5,dist:10,ry:0.3},M002:{px:0.5,py:-.3,dist:11,ry:0.0},M003:{px:0,py:-.2,dist:11,ry:0.6}};
+      const p=pos[hit.id];if(p){tgt.px=p.px;tgt.py=p.py;tgt.dist=p.dist;tgt.ry=p.ry;}
+    }else{hideTT();}
+  }
+  drag=false;canvas.style.cursor='crosshair';
+  autoOrbitTimer=300; // resume orbit after 5s idle
+});
+window.addEventListener('mousemove',e=>{
+  autoOrbitTimer=0;
+  if(drag){
+    const dx2=e.clientX-lx,dy2=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+    if(sh||e.buttons===4){tgt.px+=dx2*.014;tgt.py-=dy2*.014;}
+    else{tgt.ry+=dx2*.007;tgt.rx+=dy2*.005;tgt.rx=Math.max(-1.56,Math.min(.25,tgt.rx));}
+    canvas.style.cursor='grabbing';
+  }else{const rect=canvas.getBoundingClientRect();chkH(e.clientX-rect.left,e.clientY-rect.top);}
+});
+canvas.addEventListener('wheel',e=>{
+  tgt.dist=Math.max(4,Math.min(35,tgt.dist+e.deltaY*.025));
+  document.getElementById('bbZ').textContent=Math.round(1200/tgt.dist)+'%';
+  autoOrbitTimer=0;
+},{passive:true});
+
+// ── Tooltip / hover ───────────────────────────────────────────────────────────
 const ttEl=document.getElementById('twtt'),hlEl=document.getElementById('hlbl');
 let lastH=null;
 function chkH(mx,my){
   if(drag){hlEl.classList.remove('show');return;}
-  const r=ray(mx,my,curMVP); if(!r) return;
+  const r=ray(mx,my,curMVP);if(!r)return;
   let cl=null,ct=Infinity;
   for(const b of mb){const t=rayAABB(r,b);if(t<ct){ct=t;cl=b;}}
   if(cl&&ct<100){
@@ -1627,7 +1862,7 @@ function chkH(mx,my){
   }else{lastH=null;hlEl.classList.remove('show');canvas.style.cursor=drag?'grabbing':'crosshair';}
 }
 function showTT(id,mx,my){
-  const d=MD[id]; if(!d) return;
+  const d=MD[id];if(!d)return;
   document.getElementById('ttN').textContent=d.name;
   document.getElementById('ttT').textContent=d.temp;
   document.getElementById('ttV').textContent=d.vib+' mm/s';
@@ -1637,69 +1872,233 @@ function showTT(id,mx,my){
   st.className='tt-st tt-'+d.st;
   st.textContent=d.st==='ok'?'● OPERATIONAL':d.st==='wn'?'▲ WARNING':'✖ CRITICAL';
   let tx=mx+14,ty=my-18;
-  if(tx+190>window.innerWidth) tx=mx-210;
-  if(ty+130>window.innerHeight) ty=my-140;
+  if(tx+200>window.innerWidth)tx=mx-220;if(ty+140>window.innerHeight)ty=my-150;
   ttEl.style.left=tx+'px';ttEl.style.top=ty+'px';ttEl.classList.add('show');
 }
 function hideTT(){ttEl.classList.remove('show');}
 
-const cam={rx:0.42,ry:0.5,dist:14,px:0,py:0};
-let drag=false,sh=false,lx=0,ly=0,curMVP=new Float32Array(16);
-
-canvas.addEventListener('mousedown',e=>{drag=true;sh=e.shiftKey;lx=e.clientX;ly=e.clientY;hideTT();e.preventDefault();});
-window.addEventListener('mouseup',e=>{
-  const dx2=Math.abs(e.clientX-lx),dy2=Math.abs(e.clientY-ly);
-  if(drag&&dx2<5&&dy2<5){
-    const rect=canvas.getBoundingClientRect();
-    const hit=pickM(e.clientX-rect.left,e.clientY-rect.top);
-    if(hit){upPanel(hit.id);showTT(hit.id,e.clientX,e.clientY);doRpl(e.clientX,e.clientY);}
-    else hideTT();
-  }
-  drag=false;canvas.style.cursor='crosshair';
-});
-window.addEventListener('mousemove',e=>{
-  if(drag){
-    const dx2=e.clientX-lx,dy2=e.clientY-ly;lx=e.clientX;ly=e.clientY;
-    if(sh||e.buttons===4){cam.px+=dx2*.014;cam.py-=dy2*.014;}
-    else{cam.ry+=dx2*.007;cam.rx+=dy2*.005;cam.rx=Math.max(-1.56,Math.min(.2,cam.rx));}
-    canvas.style.cursor='grabbing';
-  }else{const rect=canvas.getBoundingClientRect();chkH(e.clientX-rect.left,e.clientY-rect.top);}
-});
-canvas.addEventListener('wheel',e=>{cam.dist=Math.max(4,Math.min(30,cam.dist+e.deltaY*.022));document.getElementById('bbZ').textContent=Math.round(1200/cam.dist)+'%';},{passive:true});
-
 function doRpl(x,y){const r=document.createElement('div');r.className='rpl';r.style.left=x+'px';r.style.top=y+'px';document.body.appendChild(r);setTimeout(()=>r.remove(),500);}
 
-let fc=0,ft=performance.now();
+function wbox(cx,cy,cz,w,h,d,p=0.1){
+  const x0=cx-w/2-p,x1=cx+w/2+p,y0=cy-p,y1=cy+h+p,z0=cz-d/2-p,z1=cz+d/2+p;
+  return new Float32Array([x0,y0,z0,x1,y0,z0,x1,y0,z0,x1,y0,z1,x1,y0,z1,x0,y0,z1,x0,y0,z1,x0,y0,z0,
+    x0,y1,z0,x1,y1,z0,x1,y1,z0,x1,y1,z1,x1,y1,z1,x0,y1,z1,x0,y1,z1,x0,y1,z0,
+    x0,y0,z0,x0,y1,z0,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z1,x0,y0,z1,x0,y1,z1]);
+}
+
+// ── Animation state ───────────────────────────────────────────────────────────
+let drillPhase=0,beltPhase=0,armPhase=0,weldPhase=0;
+let weldArcOn=false,weldArcTimer=0;
+let drillDown=0; // 0..1
+let partPositions=[0,1.2,2.4,3.6]; // belt parts
+
+// ── Dynamic geometry update (write into existing GPU buffers) ─────────────────
+function setVertexRange(startVert,endVert,nx,ny,nz,nw,nh,nd,r,g,b){
+  // Overwrite the box geometry at given vertex range with new position
+  // We just rebuild it in-place
+  const x0=nx-nw/2,x1=nx+nw/2,y0=ny,y1=ny+nh,z0=nz-nd/2,z1=nz+nd/2;
+  const br=[0.75,0.55,0.6,0.65,1.0,0.25];
+  const faces=[
+    [[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y0,z1],[x1,y1,z1],[x0,y1,z1]],
+    [[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y0,z0],[x0,y1,z0],[x1,y1,z0]],
+    [[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y0,z0],[x0,y1,z1],[x0,y1,z0]],
+    [[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y0,z1],[x1,y1,z0],[x1,y1,z1]],
+    [[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z1],[x1,y1,z0],[x0,y1,z0]],
+    [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z0],[x1,y0,z1],[x0,y0,z1]],
+  ];
+  let vi=startVert;
+  for(let fi=0;fi<6;fi++){
+    const bv=br[fi];
+    for(const v of faces[fi]){
+      vPos[vi*3]=v[0];vPos[vi*3+1]=v[1];vPos[vi*3+2]=v[2];
+      vCol[vi*3]=r*bv;vCol[vi*3+1]=g*bv;vCol[vi*3+2]=b*bv;
+      vBri[vi]=bv;
+      vi++;
+    }
+  }
+}
+
+// ── Main render loop ──────────────────────────────────────────────────────────
+let fc=0,ft=performance.now(),lt=performance.now();
+let glowR=0.94,glowG=0.65,glowB=0.0,glowS=0;
+let camShake=0;
+
 function frame(){
   requestAnimationFrame(frame);
+  const now=performance.now();
+  const dt=Math.min((now-lt)/1000,0.05);
+  lt=now;
+  const T=now/1000;
+
+  // Canvas resize
   const wrap=canvas.parentElement;
-  if(canvas.width!==wrap.clientWidth||canvas.height!==wrap.clientHeight) resize();
+  if(canvas.width!==wrap.clientWidth||canvas.height!==wrap.clientHeight)resize();
+
+  // ── Auto-orbit ──────────────────────────────────────────────────────────────
+  if(!drag){
+    autoOrbitTimer++;
+    if(autoOrbitTimer>400){
+      tgt.ry+=0.0015;
+    }
+  }
+
+  // ── Camera smooth follow ────────────────────────────────────────────────────
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const lf=Math.min(1,dt*6);
+  cam.rx=lerp(cam.rx,tgt.rx,lf);
+  cam.ry=lerp(cam.ry,tgt.ry,lf);
+  cam.dist=lerp(cam.dist,tgt.dist,lf);
+  cam.px=lerp(cam.px,tgt.px,lf);
+  cam.py=lerp(cam.py,tgt.py,lf);
+
+  // ── Animate machines ────────────────────────────────────────────────────────
+  drillPhase+=dt*2.5;
+  const drillY=0.6+Math.sin(drillPhase)*0.55; // spindle stroke
+  setVertexRange(dynMeshes.drill.start,dynMeshes.drill.end,-2.45,drillY,-2.5,.18,.85,.18,.22,.55,.95);
+  const bitY=drillY-.25;
+  setVertexRange(dynMeshes.drillBit.start,dynMeshes.drillBit.end,-2.45,bitY,-2.5,.1,.32,.1,.6,.7,.9);
+
+  // Drill chips when bit is near bottom
+  if(Math.sin(drillPhase)< -0.7&&Math.random()<0.4){
+    spawnParticle(-2.45,0.22,-2.5,2);
+  }
+  // Drill coolant steam
+  if(Math.random()<0.08) spawnParticle(-2.45,0.5,-2.5,3);
+
+  // Belt animation — scroll panels
+  beltPhase=(beltPhase+dt*0.9)%0.62;
+  for(let i=0;i<8;i++){
+    const px=-1.0+((i*0.62+beltPhase)%4.96)-0.0;
+    setVertexRange(dynMeshes.belt.panels[i],dynMeshes.belt.panels[i]+36,px,.22,0,.55,.04,.78,.28,.22,.1);
+  }
+  // Parts on belt
+  for(let i=0;i<4;i++){
+    partPositions[i]=(partPositions[i]+dt*0.9)%4.96;
+    const ppx=-1.0+partPositions[i];
+    setVertexRange(dynMeshes.parts.start+i*36,dynMeshes.parts.start+(i+1)*36,ppx,.28,0,.3,.22,.3,.85,.7,.15);
+  }
+  // Conveyor steam
+  if(Math.random()<0.04) spawnParticle(1.3+Math.random()*3,.35,Math.random()*.4-.2,3);
+
+  // Robot arm swing
+  armPhase+=dt*0.8;
+  const armSwing=Math.sin(armPhase)*0.5;
+  const armX=3.2+armSwing*0.4;
+  const armZ=-0.5+Math.cos(armPhase)*0.3;
+  setVertexRange(dynMeshes.armBase.start,dynMeshes.armBase.end,armX,1.58,armZ,.15,.8,.15,.55,.25,.08);
+  setVertexRange(dynMeshes.armFore.start,dynMeshes.armFore.end,armX+armSwing*.2,2.35,armZ-.2,.12,.6,.12,.55,.25,.08);
+  setVertexRange(dynMeshes.gripper.start,dynMeshes.gripper.end,armX+armSwing*.3,2.9,armZ-.05,.25,.08,.2,.8,.6,.1);
+
+  // Weld arm sweep
+  weldPhase+=dt*0.6;
+  const wx=-1.5+Math.sin(weldPhase)*0.4;
+  const wz=4.5+Math.cos(weldPhase)*0.3;
+  setVertexRange(dynMeshes.weldArm1.start,dynMeshes.weldArm1.end,-1.5,1.22,4.5,.16,1.0,.16,.5,.25,.08);
+  setVertexRange(dynMeshes.weldArm2.start,dynMeshes.weldArm2.end,wx-.3,2.18,wz-.2,.14,.75,.14,.5,.25,.08);
+  setVertexRange(dynMeshes.weldWrist.start,dynMeshes.weldWrist.end,wx-.1,2.88,wz-.32,.18,.12,.18,.55,.28,.1);
+  setVertexRange(dynMeshes.torch.start,dynMeshes.torch.end,wx-.1,2.72,wz-.45,.06,.45,.06,.6,.58,.55);
+
+  // Weld arc — sparks burst every ~1.2s
+  weldArcTimer-=dt;
+  if(weldArcTimer<=0){
+    weldArcOn=!weldArcOn;
+    weldArcTimer=weldArcOn?0.3+Math.random()*0.4:0.4+Math.random()*0.8;
+  }
+  if(weldArcOn){
+    const sparkCount=Math.floor(Math.random()*8)+4;
+    for(let i=0;i<sparkCount;i++) spawnParticle(wx-.1,2.55,wz-.58,0);
+    glowR=0.2;glowG=0.6;glowB=1.0;glowS=Math.min(glowS+dt*8,1.0);
+    // weld smoke
+    if(Math.random()<0.3) spawnParticle(wx-.1,2.6,wz-.55,1);
+  }else{
+    glowR=lerp(glowR,0.94,dt*2);glowG=lerp(glowG,0.65,dt*2);glowB=lerp(glowB,0.0,dt*2);
+    glowS=Math.max(0,glowS-dt*3);
+  }
+
+  // Camera shake on failure (future: wire to scenario)
+  camShake=Math.max(0,camShake-dt*5);
+
+  // ── Upload dynamic geometry ─────────────────────────────────────────────────
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufP);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vPos),gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufC);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vCol),gl.DYNAMIC_DRAW);
+
+  // ── Update particles ────────────────────────────────────────────────────────
+  let activeParts=0;
+  for(let i=0;i<MAX_P;i++){
+    if(pLife[i]<=0)continue;
+    activeParts++;
+    pLife[i]-=dt;
+    const idx=i*3;
+    pPos[idx]  +=pVel[idx]*dt*60;
+    pPos[idx+1]+=pVel[idx+1]*dt*60;
+    pPos[idx+2]+=pVel[idx+2]*dt*60;
+    // gravity
+    if(pType[i]!==1&&pType[i]!==3) pVel[idx+1]-=0.003;
+    // fade
+    const frac=pLife[i]/pMaxLife[i];
+    if(pType[i]===1||pType[i]===3){ // smoke/steam fades and grows dim
+      pCol[idx]=pCol[idx+1]=pCol[idx+2]=0.15*frac;
+    }else if(pType[i]===0){ // spark cools
+      pCol[idx]=0.95*frac+0.1;
+      pCol[idx+1]=(0.6*frac*frac);
+      pCol[idx+2]=0.05*frac*frac;
+    }
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   gl.viewport(0,0,canvas.width,canvas.height);
-  gl.clearColor(.038,.044,.060,1);
+  const shakeX=camShake*(Math.random()-.5)*.015;
+  const shakeY=camShake*(Math.random()-.5)*.015;
+  gl.clearColor(.025,.028,.038,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
-  const proj=mP(.76,canvas.width/canvas.height,.1,80);
-  const view=mul4(mT(cam.px,cam.py-1.2,-cam.dist),mul4(mRX(cam.rx),mRY(cam.ry)));
-  const mvp=mul4(proj,view); curMVP=mvp;
-  gl.useProgram(prog); gl.uniformMatrix4fv(locM,false,mvp);
-  gl.bindBuffer(gl.ARRAY_BUFFER,bufP); gl.enableVertexAttribArray(locP); gl.vertexAttribPointer(locP,3,gl.FLOAT,false,0,0);
-  gl.bindBuffer(gl.ARRAY_BUFFER,bufC3); gl.enableVertexAttribArray(locC); gl.vertexAttribPointer(locC,3,gl.FLOAT,false,0,0);
+
+  const proj=mP(.72,canvas.width/canvas.height,.1,100);
+  const view=mul4(mT(cam.px+shakeX,cam.py-1.4+shakeY,-cam.dist),mul4(mRX(cam.rx),mRY(cam.ry)));
+  const mvp=mul4(proj,view);curMVP=mvp;
+
+  // Draw main scene
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(uMVP,false,mvp);
+  gl.uniform3f(uGlow,glowR,glowG,glowB);
+  gl.uniform1f(uGlowStr,glowS);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufP);gl.enableVertexAttribArray(aP);gl.vertexAttribPointer(aP,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufC);gl.enableVertexAttribArray(aC);gl.vertexAttribPointer(aC,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufB);gl.enableVertexAttribArray(aB);gl.vertexAttribPointer(aB,1,gl.FLOAT,false,0,0);
   gl.drawArrays(gl.TRIANGLES,0,NV);
+
+  // Draw particles
+  if(activeParts>0){
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    gl.useProgram(pProg);gl.uniformMatrix4fv(ppM,false,mvp);
+    gl.bindBuffer(gl.ARRAY_BUFFER,pBufP);gl.bufferData(gl.ARRAY_BUFFER,pPos,gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(ppP);gl.vertexAttribPointer(ppP,3,gl.FLOAT,false,0,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,pBufC);gl.bufferData(gl.ARRAY_BUFFER,pCol,gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(ppC);gl.vertexAttribPointer(ppC,3,gl.FLOAT,false,0,0);
+    gl.drawArrays(gl.POINTS,0,MAX_P);
+    gl.disable(gl.BLEND);
+  }
+
+  // Highlight selected machine
   const sel=mb.find(b=>b.id===selId);
   if(sel){
-    const pulse=.55+Math.sin(performance.now()*.004)*.45;
+    const pulse=.5+Math.sin(T*3)*.5;
     const d=MD[selId];
-    const col=d?.st==='dn'?[.84,.19,.19]:d?.st==='wn'?[.94,.65,.0]:[.94,.65,.0];
+    const col=d?.st==='dn'?[.9,.15,.15]:d?.st==='wn'?[.95,.6,.0]:[.95,.6,.0];
     const wf=wbox(sel.cx,sel.cy-sel.hh,sel.cz,sel.hw*2,sel.hh*2,sel.hd*2);
-    gl.bindBuffer(gl.ARRAY_BUFFER,hlBuf); gl.bufferData(gl.ARRAY_BUFFER,wf,gl.DYNAMIC_DRAW);
-    gl.useProgram(hp); gl.uniformMatrix4fv(hlM,false,mvp);
+    gl.bindBuffer(gl.ARRAY_BUFFER,hlBuf);gl.bufferData(gl.ARRAY_BUFFER,wf,gl.DYNAMIC_DRAW);
+    gl.useProgram(hp);gl.uniformMatrix4fv(hlM,false,mvp);
     gl.uniform3f(hlC,col[0]*pulse,col[1]*pulse,col[2]*pulse);
-    gl.enableVertexAttribArray(hlP); gl.vertexAttribPointer(hlP,3,gl.FLOAT,false,0,0);
+    gl.enableVertexAttribArray(hlP);gl.vertexAttribPointer(hlP,3,gl.FLOAT,false,0,0);
     gl.drawArrays(gl.LINES,0,24);
   }
-  fc++;const now=performance.now();if(now-ft>=1000){document.getElementById('bbF').textContent=fc;fc=0;ft=now;}
+
+  fc++;const n2=performance.now();if(n2-ft>=1000){document.getElementById('bbF').textContent=fc;fc=0;ft=n2;}
 }
-frame(); upPanel('M001');
+frame();upPanel('M001');
 </script>
 """
 
