@@ -1450,7 +1450,7 @@ uniform vec3 uGlow;
 uniform float uGlowStr;
 void main(){
   vec3 c=vC*vB;
-  c=mix(c,uGlow,uGlowStr*0.18);
+  c=mix(c,uGlow,uGlowStr*0.04);
   gl_FragColor=vec4(c,1.0);
 }`;
 
