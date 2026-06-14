@@ -48,7 +48,7 @@ alert_log       = []
 pred_history    = []
 maintenance_log = []
 notifications   = []
-thresholds      = {'temperature': 100, 'vibration': 60, 'pressure': 140, 'oil_level': 40}
+thresholds      = {'temperature': 85, 'vibration': 1.8, 'pressure': 3.0, 'oil_level': 40}
 last_update     = {"time": 0}
 machine_counter = {"count": 3}
 
@@ -57,31 +57,31 @@ class Machine:
         self.name = name
         self.display_name = display_name
         self.machine_type = machine_type
-        load_map = {"Low": random.uniform(30,50), "Medium": random.uniform(50,70), "High": random.uniform(70,85)}
-        self.load        = load_map.get(initial_load, 60)
-        self.temp        = random.uniform(60,70)
-        self.vibration   = random.uniform(0.1,0.5)
-        self.efficiency  = random.uniform(85,95)
-        self.pressure    = random.uniform(1.5,2.5)
-        self.energy      = random.uniform(40,60)
-        self.output      = random.randint(300,400)
-        self.products    = random.randint(1000,2000)
-        self.uptime      = random.uniform(90,99)
-        self.runtime     = random.randint(1,12)
+        self.load        = random.uniform(45, 65)
+        # Start with safe, healthy values
+        self.temp        = random.uniform(58, 68)
+        self.vibration   = random.uniform(0.2, 0.6)
+        self.efficiency  = random.uniform(85, 95)
+        self.pressure    = random.uniform(1.5, 2.5)
+        self.energy      = random.uniform(40, 60)
+        self.output      = random.randint(300, 400)
+        self.products    = random.randint(1000, 2000)
+        self.uptime      = random.uniform(90, 99)
+        self.runtime     = random.randint(1, 12)
         self.state       = "Running"
         self.warning_ticks     = 0
         self.maintenance_ticks = 0
         self.prediction  = ""
-        self.health_score = 100.0
-        self.rul         = random.randint(200,500)
-        self.oee         = random.uniform(75,92)
-        self.mtbf        = random.uniform(100,300)
-        self.mttr        = random.uniform(1,8)
-        self.defect_rate = random.uniform(0.1,2.0)
+        self.health_score = random.uniform(82, 95)
+        self.rul         = random.randint(280, 480)
+        self.oee         = random.uniform(78, 92)
+        self.mtbf        = random.uniform(100, 300)
+        self.mttr        = random.uniform(1, 8)
+        self.defect_rate = random.uniform(0.1, 2.0)
         self.downtime_today = 0
         self.carbon      = 0.0
-        self.oil_level   = random.uniform(50,90)
-        self.runtime_hours = random.randint(100,3000)
+        self.oil_level   = random.uniform(60, 90)
+        self.runtime_hours = random.randint(100, 3000)
         self.temp_history       = []
         self.output_history     = []
         self.efficiency_history = []
@@ -90,48 +90,100 @@ class Machine:
         self.added_at    = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     def update(self, sc_mode, other_machines=None):
-        if sc_mode == "high_load":  self.load = min(100, self.load + random.uniform(1,3))
-        elif sc_mode == "failure":  self.load = min(100, self.load + random.uniform(2,5))
-        else:                       self.load = max(40, min(75, self.load + random.uniform(-2,2)))
-        if other_machines:
-            stopped = [m for m in other_machines if m.state in ["Failure","Maintenance"]]
-            if stopped: self.load = min(100, self.load + len(stopped)*2)
-        if self.load > 80:
-            self.temp += random.uniform(0.5,1.5); self.vibration += random.uniform(0.05,0.15); self.efficiency -= random.uniform(0.5,1.5)
-        elif self.load > 60:
-            self.temp += random.uniform(-0.2,0.5); self.vibration += random.uniform(-0.05,0.05); self.efficiency += random.uniform(-0.5,0.5)
-        else:
-            self.temp -= random.uniform(0,0.5); self.vibration -= random.uniform(0,0.05); self.efficiency += random.uniform(0,0.5)
-        self.temp        = max(55, min(98, self.temp))
-        self.vibration   = max(0.1, min(3.0, self.vibration))
-        self.efficiency  = max(50, min(99, self.efficiency))
-        self.pressure    = round(random.uniform(1.0,3.5), 2)
-        self.energy      = round(max(30, min(95, self.energy + random.uniform(-1,1))), 1)
-        self.output      = max(100, min(500, int(self.output + (self.efficiency-80)*2)))
-        self.products   += max(0, int(self.output/100))
+        # --- Load adjustment per scenario ---
+        if sc_mode == "normal":
+            # Gentle drift, stay in healthy range
+            self.load = max(40, min(72, self.load + random.uniform(-1.5, 1.5)))
+        elif sc_mode == "high_load":
+            # Push load up but cap before failure
+            self.load = max(55, min(92, self.load + random.uniform(0.5, 2.0)))
+        else:  # failure
+            self.load = max(70, min(100, self.load + random.uniform(1.5, 4.0)))
+
+        # --- Temp & vibration per scenario ---
+        if sc_mode == "normal":
+            # Slowly drift toward healthy midpoint
+            target_t = 66.0
+            self.temp = self.temp + (target_t - self.temp) * 0.05 + random.uniform(-0.4, 0.4)
+            self.temp = max(58, min(74, self.temp))
+            target_v = 0.45
+            self.vibration = self.vibration + (target_v - self.vibration) * 0.05 + random.uniform(-0.03, 0.03)
+            self.vibration = max(0.15, min(0.9, self.vibration))
+            self.efficiency = max(82, min(97, self.efficiency + random.uniform(-0.3, 0.5)))
+
+        elif sc_mode == "high_load":
+            self.temp = max(68, min(84, self.temp + random.uniform(0.2, 0.8)))
+            self.vibration = max(0.4, min(1.6, self.vibration + random.uniform(0.02, 0.1)))
+            self.efficiency = max(70, min(90, self.efficiency + random.uniform(-0.8, 0.3)))
+
+        else:  # failure
+            self.temp = max(75, min(98, self.temp + random.uniform(0.5, 1.8)))
+            self.vibration = max(0.8, min(3.0, self.vibration + random.uniform(0.1, 0.3)))
+            self.efficiency = max(50, min(82, self.efficiency + random.uniform(-1.5, 0.2)))
+
+        self.pressure    = round(random.uniform(1.0, 3.5), 2)
+        self.energy      = round(max(30, min(95, self.energy + random.uniform(-1, 1))), 1)
+        self.output      = max(0, min(500, int(self.output + (self.efficiency - 80) * 2)))
+        self.products   += max(0, int(self.output / 100))
         self.carbon     += self.energy * 0.00023
-        self.oee         = round(max(40, min(95, self.oee + random.uniform(-1,1))), 1)
-        self.oil_level   = max(10, min(100, self.oil_level - random.uniform(0,0.1)))
-        self.runtime_hours += random.uniform(0.01,0.05)
-        tp = max(0,(self.temp-70)*1.5); vp = max(0,(self.vibration-0.5)*20); ep = max(0,(85-self.efficiency)*0.5)
-        self.health_score = max(0, min(100, 100-tp-vp-ep))
-        self.rul = max(0, int(self.health_score*5 + random.uniform(-5,5)))
+        self.oee         = round(max(40, min(95, self.oee + random.uniform(-0.5, 0.5))), 1)
+        self.oil_level   = max(10, min(100, self.oil_level - random.uniform(0, 0.08)))
+        self.runtime_hours += random.uniform(0.01, 0.05)
+
+        # --- Health score ---
+        tp = max(0, (self.temp - 70) * 1.2)
+        vp = max(0, (self.vibration - 0.5) * 18)
+        ep = max(0, (85 - self.efficiency) * 0.4)
+        self.health_score = max(0, min(100, 100 - tp - vp - ep))
+        self.rul = max(0, int(self.health_score * 5 + random.uniform(-5, 5)))
+
+        # --- State machine ---
         if self.state == "Maintenance":
-            self.maintenance_ticks += 1; self.downtime_today += 1
+            self.maintenance_ticks += 1
+            self.downtime_today += 1
             if self.maintenance_ticks > 5:
-                self.state = "Running"; self.temp = random.uniform(60,70); self.vibration = random.uniform(0.1,0.5)
-                self.load = random.uniform(50,70); self.warning_ticks = 0; self.maintenance_ticks = 0
-        elif self.temp > 90 or self.vibration > 2.5:
-            self.state = "Failure"; self.output = 0; self.downtime_today += 1
-        elif self.temp > 82 or self.vibration > 1.8:
-            self.warning_ticks += 1; self.state = "Warning"
-            if self.warning_ticks > 4: self.state = "Failure"; self.output = 0
-        elif self.load > 85: self.state = "Overloaded"; self.warning_ticks = 0
-        elif self.state == "Failure": self.state = "Maintenance"; self.maintenance_ticks = 0
-        else: self.state = "Running"; self.warning_ticks = 0
+                self.state = "Running"
+                # Reset to safe values after maintenance
+                self.temp = random.uniform(60, 68)
+                self.vibration = random.uniform(0.2, 0.5)
+                self.load = random.uniform(45, 65)
+                self.warning_ticks = 0
+                self.maintenance_ticks = 0
+        elif sc_mode == "failure" and (self.temp > 90 or self.vibration > 2.5):
+            self.state = "Failure"
+            self.output = 0
+            self.downtime_today += 1
+        elif sc_mode == "high_load" and (self.temp > 82 or self.vibration > 1.6):
+            self.warning_ticks += 1
+            self.state = "Warning"
+            if self.warning_ticks > 6:
+                self.state = "Failure"
+                self.output = 0
+        elif sc_mode == "normal":
+            # Normal mode: machines should stay Running
+            if self.state == "Failure":
+                self.state = "Maintenance"
+                self.maintenance_ticks = 0
+            elif self.state not in ["Maintenance"]:
+                self.state = "Running"
+                self.warning_ticks = 0
+        elif self.load > 90:
+            self.state = "Overloaded"
+        elif self.state == "Failure":
+            self.state = "Maintenance"
+            self.maintenance_ticks = 0
+        else:
+            self.state = "Running"
+            self.warning_ticks = 0
+
         self.prediction = self._predict()
-        for hist,val in [(self.temp_history,round(self.temp,1)),(self.output_history,self.output),
-                         (self.efficiency_history,round(self.efficiency,1)),(self.energy_history,self.energy),(self.oee_history,self.oee)]:
+        for hist, val in [
+            (self.temp_history, round(self.temp, 1)),
+            (self.output_history, self.output),
+            (self.efficiency_history, round(self.efficiency, 1)),
+            (self.energy_history, self.energy),
+            (self.oee_history, self.oee)
+        ]:
             hist.append(val)
             if len(hist) > 30: hist.pop(0)
 
@@ -139,24 +191,24 @@ class Machine:
         if self.state == "Failure":      return "CRITICAL — Machine has failed. Maintenance required."
         if self.state == "Maintenance":  return "MAINTENANCE — Recovery in progress."
         if self.warning_ticks >= 3:      return f"CRITICAL — Shutdown imminent. {self.warning_ticks} fault cycles."
-        if self.temp > 78 and self.vibration > 1.5: return "HIGH RISK — Failure predicted within 2 min."
-        if self.temp > 74 and self.vibration > 1.2: return "WARNING — Failure likely in 5 min. Reduce load."
+        if self.temp > 80 and self.vibration > 1.4: return "HIGH RISK — Failure predicted within 2 min."
+        if self.temp > 76 and self.vibration > 1.1: return "WARNING — Failure likely soon. Reduce load."
         if self.load > 85:               return "WARNING — Overloaded. Degraded efficiency."
         if self.efficiency < 75:         return "WARNING — Efficiency below threshold."
-        if self.temp > 70:               return "MONITOR — Temperature elevated."
+        if self.temp > 72:               return "MONITOR — Temperature elevated."
         return "NOMINAL — All parameters within spec."
 
     def get_alerts(self):
         a = []
-        if self.state == "Failure":      a.append(("critical", f"{self.display_name}: MACHINE FAILURE"))
-        elif self.state == "Maintenance":a.append(("info",     f"{self.display_name}: Under maintenance"))
-        elif self.state == "Warning":    a.append(("warning",  f"{self.display_name}: {self.warning_ticks} fault cycles"))
-        elif self.state == "Overloaded": a.append(("warning",  f"{self.display_name}: Overloaded {round(self.load)}%"))
-        if self.temp > 82:       a.append(("critical", f"{self.display_name}: Temp {round(self.temp,1)}°C CRITICAL"))
-        elif self.temp > 74:     a.append(("warning",  f"{self.display_name}: Temp {round(self.temp,1)}°C elevated"))
-        if self.vibration > 2.0: a.append(("critical", f"{self.display_name}: Vibration {round(self.vibration,2)} mm/s CRITICAL"))
-        elif self.vibration > 1.5: a.append(("warning",f"{self.display_name}: Vibration {round(self.vibration,2)} mm/s elevated"))
-        if self.health_score < 40: a.append(("critical",f"{self.display_name}: Health {round(self.health_score)}% CRITICAL"))
+        if self.state == "Failure":       a.append(("critical", f"{self.display_name}: MACHINE FAILURE"))
+        elif self.state == "Maintenance": a.append(("info",     f"{self.display_name}: Under maintenance"))
+        elif self.state == "Warning":     a.append(("warning",  f"{self.display_name}: {self.warning_ticks} fault cycles"))
+        elif self.state == "Overloaded":  a.append(("warning",  f"{self.display_name}: Overloaded {round(self.load)}%"))
+        if self.temp > 84:        a.append(("critical", f"{self.display_name}: Temp {round(self.temp,1)}°C CRITICAL"))
+        elif self.temp > 76:      a.append(("warning",  f"{self.display_name}: Temp {round(self.temp,1)}°C elevated"))
+        if self.vibration > 2.0:  a.append(("critical", f"{self.display_name}: Vibration {round(self.vibration,2)} mm/s CRITICAL"))
+        elif self.vibration > 1.4:a.append(("warning",  f"{self.display_name}: Vibration {round(self.vibration,2)} mm/s elevated"))
+        if self.health_score < 40:a.append(("critical", f"{self.display_name}: Health {round(self.health_score)}% CRITICAL"))
         if not a: a.append(("ok", f"{self.display_name}: All parameters nominal"))
         return a
 
@@ -218,45 +270,26 @@ def badge_cls(s):
     return {"Running":"st-run","Warning":"st-warn","Overloaded":"st-over","Failure":"st-fail","Maintenance":"st-maint"}.get(s,"st-run")
 
 def health_color(h):
-    return "#f0a500" if h>=75 else "#e07030" if h>=50 else "#d63031"
+    return "#00b894" if h>=75 else "#f0a500" if h>=50 else "#d63031"
 
 def state_bar_color(s):
     return {"Running":"#00b894","Warning":"#f0a500","Overloaded":"#e07030","Failure":"#d63031","Maintenance":"#0984e3"}.get(s,"#636e72")
 
 # ── DESIGN SYSTEM ─────────────────────────────────────────────────────────────
-# Palette: near-black base, warm cream text, amber/gold accent
-# Industrial SCADA feel — Space Grotesk + Space Mono
-# No blue-purple gradients, no generic AI aesthetic
-
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 
 :root{
-  --bg:#0f0f0f;
-  --s1:#161616;
-  --s2:#1c1c1c;
-  --s3:#222222;
-  --b1:#2a2a2a;
-  --b2:#333333;
-  --tx:#e8e4dc;
-  --t2:#9a9690;
-  --t3:#555250;
-  --ac:#f0a500;
-  --ac2:#c98a00;
-  --acd:rgba(240,165,0,0.1);
-  --ok:#00b894;
-  --okd:rgba(0,184,148,0.1);
-  --wn:#f0a500;
-  --wnd:rgba(240,165,0,0.1);
-  --dn:#d63031;
-  --dnd:rgba(214,48,49,0.1);
-  --in:#0984e3;
-  --ind:rgba(9,132,227,0.1);
-  --ov:#e07030;
-  --r:4px;
-  --rm:6px;
+  --bg:#0f0f0f;--s1:#161616;--s2:#1c1c1c;--s3:#222222;--b1:#2a2a2a;--b2:#333333;
+  --tx:#e8e4dc;--t2:#9a9690;--t3:#555250;
+  --ac:#f0a500;--ac2:#c98a00;--acd:rgba(240,165,0,0.1);
+  --ok:#00b894;--okd:rgba(0,184,148,0.1);
+  --wn:#f0a500;--wnd:rgba(240,165,0,0.1);
+  --dn:#d63031;--dnd:rgba(214,48,49,0.1);
+  --in:#0984e3;--ind:rgba(9,132,227,0.1);
+  --ov:#e07030;--r:4px;--rm:6px;
 }
 
 html{scroll-behavior:smooth;}
@@ -265,7 +298,6 @@ body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--b1);border-radius:2px;}
 
-/* SIDEBAR */
 .sb{width:220px;background:var(--s1);border-right:1px solid var(--b1);position:fixed;height:100vh;display:flex;flex-direction:column;z-index:100;overflow:hidden;}
 .sb-head{padding:18px 14px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;}
 .logo{display:flex;align-items:center;gap:10px;}
@@ -296,37 +328,31 @@ body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color
 .lo-btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:8px;border-radius:var(--r);font-size:11.5px;font-weight:500;border:1px solid var(--b1);background:transparent;color:var(--t2);text-decoration:none;transition:all 0.12s;}
 .lo-btn:hover{background:var(--s2);color:var(--tx);}
 
-/* MAIN */
 .mn{margin-left:220px;padding:28px 30px;flex:1;min-width:0;}
 .ph{margin-bottom:22px;}
 .pt{font-family:'Space Mono',monospace;font-size:17px;font-weight:700;color:var(--tx);letter-spacing:0.5px;margin-bottom:5px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .ps{font-size:10px;color:var(--t3);font-family:'Space Mono',monospace;letter-spacing:0.5px;}
 .hr{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
 
-/* GRIDS */
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
 .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:14px;}
 .mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:12px;margin-bottom:14px;}
 
-/* CARDS */
 .card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--rm);padding:18px;}
 .ct{font-size:9.5px;font-weight:700;color:var(--t3);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:14px;}
 
-/* KPI */
 .kpi{background:var(--s1);border:1px solid var(--b1);border-radius:var(--rm);padding:16px 18px;}
 .kl{font-size:9.5px;color:var(--t3);font-weight:700;letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:8px;}
 .kv{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:var(--ac);line-height:1;margin-bottom:4px;}
 .ks{font-size:11px;color:var(--t3);}
 
-/* MACHINE CARDS */
 .mc{background:var(--s1);border:1px solid var(--b1);border-radius:var(--rm);padding:16px;position:relative;}
 .mc-bar{position:absolute;top:0;left:0;right:0;height:2px;border-radius:var(--rm) var(--rm) 0 0;}
 .mc-h{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-top:6px;}
 .mc-n{font-size:13.5px;font-weight:600;color:var(--tx);margin-bottom:2px;}
 .mc-t{font-size:9.5px;color:var(--t3);font-family:'Space Mono',monospace;letter-spacing:0.5px;}
 
-/* STATE BADGES */
 .st{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:2px;font-size:9.5px;font-weight:700;font-family:'Space Mono',monospace;letter-spacing:0.5px;}
 .st::before{content:'';width:5px;height:5px;border-radius:50%;}
 .st-run{background:var(--okd);color:var(--ok);}
@@ -341,25 +367,21 @@ body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color
 .st-maint::before{background:var(--in);}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}
 
-/* STAT ROWS */
 .sr{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1);font-size:11.5px;color:var(--t2);}
 .sr:last-of-type{border-bottom:none;}
 .sv{font-family:'Space Mono',monospace;font-size:12px;color:var(--tx);}
 
-/* HEALTH BAR */
 .hbw{margin:10px 0;}
 .hbh{display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:4px;}
 .hb{height:3px;background:var(--s3);border-radius:2px;}
 .hbf{height:100%;border-radius:2px;transition:width 0.6s ease;}
 
-/* PREDICTION PILL */
 .pp{margin-top:10px;padding:8px 10px;border-radius:var(--r);font-size:10px;font-family:'Space Mono',monospace;line-height:1.4;background:var(--s2);color:var(--t2);border-top:2px solid var(--b2);}
 .pp.crit{border-top-color:var(--dn);color:var(--dn);background:var(--dnd);}
 .pp.warn{border-top-color:var(--wn);color:var(--wn);background:var(--wnd);}
 .pp.ok{border-top-color:var(--ok);color:var(--ok);background:var(--okd);}
 .mc-f{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--b1);}
 
-/* BUTTONS */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:all 0.12s;font-family:'Space Grotesk',sans-serif;border:none;white-space:nowrap;}
 .btn-ac{background:var(--ac);color:#0f0f0f;}
 .btn-ac:hover{background:var(--ac2);}
@@ -370,7 +392,6 @@ body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color
 .btn-dn{background:var(--dnd);color:var(--dn);border:1px solid var(--dn);}
 .btn-dn:hover{background:var(--dn);color:white;}
 
-/* ALERTS */
 .ar{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:11px;font-family:'Space Mono',monospace;}
 .ar:last-child{border-bottom:none;}
 .ad{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px;}
@@ -380,13 +401,11 @@ body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color
 .ad.ok{background:var(--ok);}
 .am{color:var(--t2);line-height:1.5;}
 
-/* METRIC ROWS */
 .mr{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--b1);font-size:12.5px;}
 .mr:last-child{border-bottom:none;}
 .mk{color:var(--t2);}
 .mv{font-family:'Space Mono',monospace;font-size:12px;color:var(--tx);}
 
-/* FORMS */
 .fg{margin-bottom:15px;}
 .fl{display:block;font-size:9.5px;font-weight:700;color:var(--t3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px;font-family:'Space Mono',monospace;}
 .fi{width:100%;padding:9px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);color:var(--tx);font-size:13px;font-family:'Space Grotesk',sans-serif;outline:none;transition:border-color 0.12s;}
@@ -394,38 +413,31 @@ body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color
 .fs{width:100%;padding:9px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);color:var(--tx);font-size:13px;font-family:'Space Grotesk',sans-serif;outline:none;appearance:none;cursor:pointer;}
 .fs option{background:var(--s2);}
 
-/* NOTICES */
 .nx{padding:10px 14px;border-radius:var(--r);font-size:11.5px;margin-bottom:14px;font-family:'Space Mono',monospace;}
 .nx-i{background:var(--ind);border:1px solid var(--in);color:var(--in);}
 .nx-o{background:var(--okd);border:1px solid var(--ok);color:var(--ok);}
 .nx-w{background:var(--wnd);border:1px solid var(--wn);color:var(--wn);}
 .nx-d{background:var(--dnd);border:1px solid var(--dn);color:var(--dn);}
 
-/* CHARTS */
 svg.ch{width:100%;height:120px;}
 .cg{stroke:var(--b1);stroke-width:1;}
 .cl{fill:var(--t3);font-size:8px;font-family:'Space Mono',monospace;}
 
-/* GAUGE */
 .gw{position:relative;display:inline-block;}
 .gv{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Space Mono',monospace;font-size:13px;font-weight:700;}
 .gl{text-align:center;font-size:9px;color:var(--t3);font-family:'Space Mono',monospace;margin-top:2px;letter-spacing:1px;}
 
-/* TABLE */
 table{width:100%;border-collapse:collapse;font-size:12.5px;}
 th{padding:8px 10px;text-align:left;color:var(--t3);font-size:9.5px;font-weight:700;letter-spacing:1.5px;border-bottom:1px solid var(--b1);font-family:'Space Mono',monospace;white-space:nowrap;}
 td{padding:8px 10px;border-bottom:1px solid var(--b1);color:var(--tx);vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:var(--s2);}
 
-/* RISK BAR */
 .rb{height:4px;background:var(--s3);border-radius:2px;}
 .rbf{height:100%;border-radius:2px;transition:width 0.5s;}
 
-/* SCENARIO TAG */
 .sc-tag{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;padding:2px 8px;border-radius:2px;background:var(--acd);color:var(--ac);border:1px solid var(--ac);font-family:'Space Mono',monospace;letter-spacing:1px;}
 
-/* LOGIN */
 .lw{min-height:100vh;display:flex;align-items:center;justify-content:center;width:100%;background:var(--bg);background-image:linear-gradient(var(--b1) 1px,transparent 1px),linear-gradient(90deg,var(--b1) 1px,transparent 1px);background-size:48px 48px;}
 .lb{background:var(--s1);border:1px solid var(--b2);border-radius:var(--rm);padding:44px 40px;width:400px;position:relative;}
 .lb::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ac);border-radius:var(--rm) var(--rm) 0 0;}
@@ -438,19 +450,17 @@ tr:hover td{background:var(--s2);}
 .lbtn:hover{background:var(--ac2);}
 .lh{text-align:center;color:var(--t3);font-size:10px;margin-top:16px;font-family:'Space Mono',monospace;}
 
-/* DANGER ZONE */
 .dz{background:var(--dnd);border:1px solid var(--dn);border-radius:var(--rm);padding:20px;margin-top:16px;}
 .dzt{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--dn);margin-bottom:8px;letter-spacing:1px;}
 
-/* DIVIDER */
 hr{border:none;border-top:1px solid var(--b1);margin:16px 0;}
 
-/* QUICK NAV */
 .qn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);background:var(--s2);border:1px solid var(--b1);text-decoration:none;color:var(--t2);font-size:12.5px;transition:all 0.12s;margin-bottom:6px;}
 .qn:hover{border-color:var(--ac);color:var(--tx);}
 .qni{color:var(--ac);flex-shrink:0;}
 .qnd{font-size:10px;color:var(--t3);margin-top:1px;}
 """
+
 
 ICONS = {
     "cpu":      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>',
@@ -547,7 +557,8 @@ def oee_ring(oee, size=88):
   stroke-dasharray="{dash:.1f} {circ:.1f}" stroke-linecap="round" transform="rotate(-90 {cx} {cy})"/>
 </svg><div class="gv" style="color:{color}">{oee}%</div></div><div class="gl">OEE</div>"""
 
-# ── AUTH ROUTES ───────────────────────────────────────────────────────────────
+
+# ── AUTH ──────────────────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET","POST"])
 def login():
     error=""
@@ -651,6 +662,7 @@ def home():
   </div>
 </main></body></html>"""
 
+
 # ── 3D TWIN ───────────────────────────────────────────────────────────────────
 @app.route("/twin")
 @login_required
@@ -714,7 +726,7 @@ def predict():
             tl_html=f"""<div class="card" style="margin-top:12px"><div class="ct">Failure probability — next 200h</div>
 <svg class="ch" viewBox="0 0 600 120"><line x1="20" y1="20" x2="20" y2="110" class="cg"/><line x1="20" y1="110" x2="580" y2="110" class="cg"/>
 <polyline fill="none" stroke="var(--dn)" stroke-width="1.5" points="{tl_pts}"/>{tl_c}</svg></div>"""
-        result_html=f"""<div class="card" style="border-color:{urg_color};margin-bottom:12px">
+        result_html=f"""<div id="pred-result" class="card" style="border-color:{urg_color};margin-bottom:12px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
     <div><div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:{urg_color};letter-spacing:2px">{result}</div>
     <div style="font-size:9.5px;color:var(--t3);font-family:'Space Mono',monospace;margin-top:3px">{machine_id}</div></div>
@@ -737,7 +749,7 @@ def predict():
   </div>
   <div style="padding:9px 12px;border-radius:var(--r);background:var(--s2);font-size:11px;font-family:'Space Mono',monospace;color:{urg_color};border:1px solid {urg_color}">{action}</div>
   {"" if not exp_rows else f'<hr style="margin:14px 0;border:none;border-top:1px solid var(--b1)"><div class="ct" style="margin-bottom:10px">Sensor Analysis</div>{exp_rows}'}
-</div>{tl_html}"""
+</div>{tl_html}<script>document.getElementById('pred-result').scrollIntoView({{behavior:'smooth',block:'start'}});</script>"""
 
     machine_opts="".join([f'<option value="{m.name}" {"selected" if m.name==machine_id else ""}>{m.display_name}</option>' for m in ms])
     hist_rows="".join([f'''<tr>
@@ -792,6 +804,7 @@ def predict():
     </div>
   </div>
 </main></body></html>"""
+
 
 # ── MACHINE DETAIL ────────────────────────────────────────────────────────────
 @app.route("/machine/<name>")
@@ -996,6 +1009,7 @@ def maintenance():
   </div>
 </main></body></html>"""
 
+
 # ── REPORTS ───────────────────────────────────────────────────────────────────
 @app.route("/reports")
 @login_required
@@ -1035,9 +1049,9 @@ def settings():
         for k in machines:
             v=request.form.get(f"name_{k}","").strip()
             if v and len(v)>=3: machines[k].display_name=v
-        thresholds['temperature']=float(request.form.get("thr_temp",100))
-        thresholds['vibration']=float(request.form.get("thr_vib",60))
-        thresholds['pressure']=float(request.form.get("thr_pres",140))
+        thresholds['temperature']=float(request.form.get("thr_temp",85))
+        thresholds['vibration']=float(request.form.get("thr_vib",1.8))
+        thresholds['pressure']=float(request.form.get("thr_pres",3.0))
         thresholds['oil_level']=float(request.form.get("thr_oil",40))
         nu=request.form.get("new_username","").strip(); np2=request.form.get("new_password","").strip()
         if nu and np2: users[nu]={"password":generate_password_hash(np2),"role":request.form.get("new_role","viewer")}
@@ -1058,8 +1072,8 @@ def settings():
         <div class="ct" style="margin-bottom:12px">Alert Thresholds</div>
         <div class="g2" style="gap:10px">
           <div class="fg"><label class="fl">Temp (°C)</label><input class="fi" type="number" name="thr_temp" value="{thresholds['temperature']}"/></div>
-          <div class="fg"><label class="fl">Vibration (mm/s)</label><input class="fi" type="number" name="thr_vib" value="{thresholds['vibration']}"/></div>
-          <div class="fg"><label class="fl">Pressure (PSI)</label><input class="fi" type="number" name="thr_pres" value="{thresholds['pressure']}"/></div>
+          <div class="fg"><label class="fl">Vibration (mm/s)</label><input class="fi" type="number" name="thr_vib" step="0.1" value="{thresholds['vibration']}"/></div>
+          <div class="fg"><label class="fl">Pressure (bar)</label><input class="fi" type="number" name="thr_pres" step="0.1" value="{thresholds['pressure']}"/></div>
           <div class="fg"><label class="fl">Oil Level (%)</label><input class="fi" type="number" name="thr_oil" value="{thresholds['oil_level']}"/></div>
         </div>
         <hr>
@@ -1142,6 +1156,7 @@ def decommission(name):
     </form>
   </div>
 </main></body></html>"""
+
 
 # ── EXPORTS ───────────────────────────────────────────────────────────────────
 @app.route("/export/pdf")
@@ -1236,7 +1251,8 @@ def api_machines():
 def api_alerts():
     return jsonify(alert_log[:50])
 
-# ── 3D DIGITAL TWIN PAGE ──────────────────────────────────────────────────────
+
+# ── 3D TWIN PAGE ──────────────────────────────────────────────────────────────
 TWIN_PAGE = """
 <style>
 .ts{position:fixed;top:0;left:220px;right:0;bottom:0;display:flex;flex-direction:column;background:var(--bg);}
@@ -1278,7 +1294,6 @@ TWIN_PAGE = """
 .vb.on{background:var(--acd);color:var(--ac);border-color:var(--ac);z-index:1;}
 .live{display:flex;align-items:center;gap:5px;padding:3px 8px;background:var(--okd);border:1px solid var(--ok);border-radius:2px;font-size:9.5px;font-weight:700;color:var(--ok);font-family:'Space Mono',monospace;letter-spacing:1px;}
 .ld{width:5px;height:5px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite;}
-.tb-r{margin-left:auto;display:flex;align-items:center;gap:8px;}
 .tt{position:fixed;z-index:300;pointer-events:none;background:var(--s1);border:1px solid var(--b2);border-radius:3px;padding:8px 12px;font-size:11px;color:var(--tx);font-family:'Space Mono',monospace;box-shadow:0 4px 20px rgba(0,0,0,0.4);opacity:0;transition:opacity 0.15s;white-space:nowrap;}
 .tt.show{opacity:1;}
 .tt-nm{font-weight:700;margin-bottom:4px;font-size:12px;}
@@ -1292,7 +1307,7 @@ TWIN_PAGE = """
 .hl.show{opacity:1;}
 .rpl{position:fixed;pointer-events:none;z-index:299;width:36px;height:36px;border-radius:50%;border:1px solid var(--ac);transform:translate(-50%,-50%) scale(0);animation:rpl 0.45s ease-out forwards;}
 @keyframes rpl{0%{transform:translate(-50%,-50%) scale(0);opacity:1}100%{transform:translate(-50%,-50%) scale(2.5);opacity:0}}
-.ch{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);display:flex;gap:7px;pointer-events:none;z-index:5;}
+.ch2{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);display:flex;gap:7px;pointer-events:none;z-index:5;}
 .ck{display:flex;align-items:center;gap:4px;background:var(--s1);border:1px solid var(--b1);padding:3px 8px;border-radius:2px;font-size:9px;color:var(--t3);letter-spacing:1px;font-family:'Space Mono',monospace;}
 .ck kbd{background:var(--s2);border:1px solid var(--b2);padding:1px 5px;border-radius:2px;font-size:8px;color:var(--ac);}
 </style>
@@ -1320,7 +1335,7 @@ TWIN_PAGE = """
         </div>
         <div class="live"><div class="ld"></div>LIVE</div>
       </div>
-      <div class="ch">
+      <div class="ch2">
         <div class="ck"><kbd>Click</kbd>Select</div>
         <div class="ck"><kbd>Drag</kbd>Rotate</div>
         <div class="ck"><kbd>Scroll</kbd>Zoom</div>
@@ -1328,67 +1343,60 @@ TWIN_PAGE = """
       </div>
     </div>
     <div class="trp">
-      <div class="rp-id" id="rpId">MACHINE ID: CNC-01</div>
-      <div class="rp-nm" id="rpNm">CNC Machine M-01</div>
+      <div class="rp-id" id="rpId">MACHINE ID: M001</div>
+      <div class="rp-nm" id="rpNm">Drill Press Alpha</div>
       <div class="rp-st rp-ok" id="rpSt">OPERATIONAL</div>
       <div class="rg">
         <div class="rb2" id="rb-t"><div class="rv" id="rpT">64°C</div><div class="rl">Temperature</div></div>
-        <div class="rb2" id="rb-v"><div class="rv" id="rpV">2.1<span style="font-size:9px">mm/s</span></div><div class="rl">Vibration</div></div>
-        <div class="rb2" id="rb-r"><div class="rv" id="rpR">2,840</div><div class="rl">RPM</div></div>
-        <div class="rb2" id="rb-l"><div class="rv" id="rpL">73<span style="font-size:9px">%</span></div><div class="rl">Load</div></div>
+        <div class="rb2" id="rb-v"><div class="rv" id="rpV">0.4<span style="font-size:9px">mm/s</span></div><div class="rl">Vibration</div></div>
+        <div class="rb2" id="rb-r"><div class="rv" id="rpR">65<span style="font-size:9px">%</span></div><div class="rl">Load</div></div>
+        <div class="rb2" id="rb-l"><div class="rv" id="rpL">89<span style="font-size:9px">%</span></div><div class="rl">Efficiency</div></div>
       </div>
       <div class="bw">
-        <div class="bh"><span class="bl">Health Score</span><span class="bv" id="rpHv">92%</span></div>
-        <div class="bt"><div class="bf" id="rpHb" style="width:92%;background:#00b894"></div></div>
+        <div class="bh"><span class="bl">Health Score</span><span class="bv" id="rpHv">88%</span></div>
+        <div class="bt"><div class="bf" id="rpHb" style="width:88%;background:#00b894"></div></div>
       </div>
       <div class="bw">
-        <div class="bh"><span class="bl">Useful Life</span><span class="bv" id="rpRv">1,842 hrs</span></div>
+        <div class="bh"><span class="bl">Useful Life (RUL)</span><span class="bv" id="rpRv">440 hrs</span></div>
         <div class="bt"><div class="bf" id="rpRb" style="width:75%;background:#f0a500"></div></div>
       </div>
       <div class="bw">
-        <div class="bh"><span class="bl">Bearing Wear</span><span class="bv" id="rpWv">18%</span></div>
-        <div class="bt"><div class="bf" id="rpWb" style="width:18%;background:#00b894"></div></div>
+        <div class="bh"><span class="bl">OEE</span><span class="bv" id="rpWv">85%</span></div>
+        <div class="bt"><div class="bf" id="rpWb" style="width:85%;background:#00b894"></div></div>
       </div>
-      <div class="rs">Maintenance</div>
-      <div class="rr">Last service <span id="rpLs">2025-04-12</span></div>
-      <div class="rr">Next scheduled <span id="rpNx" style="color:#f0a500">2025-06-01</span></div>
-      <div class="rr">Work orders <span id="rpWo">None</span></div>
       <div class="rs">Actions</div>
       <a href="/predict" class="rl2 rl-ac">AI PREDICTIONS ↗</a>
       <a href="/" class="rl2 rl-in">DASHBOARD ↗</a>
     </div>
   </div>
   <div class="tbot">
-    <div class="bs">Selected <b id="bbS">CNC-01</b></div>
+    <div class="bs">Selected <b id="bbS">M001</b></div>
     <div class="bs">Zoom <b id="bbZ">100%</b></div>
     <div class="bs">View <b id="bbV">PERSPECTIVE</b></div>
-    <div class="bs">Machines <b>12 active</b></div>
-    <div class="bs" style="color:var(--dn)">Alerts <b style="color:var(--dn)">3</b></div>
+    <div class="bs">Machines <b>3 active</b></div>
     <div class="bs" style="margin-left:auto">FPS <b id="bbF">--</b></div>
   </div>
 </div>
 
 <script>
+// Machine data matching the 3 real machines
 const MD={
-  'CNC-01':{name:'CNC Machine M-01',st:'ok',  temp:'64°C',vib:'2.1', rpm:'2,840',load:'73',h:92,rl:75,w:18,rv:'1,842 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-12',nx:'2025-06-01',wo:'None'},
-  'CNC-02':{name:'CNC Machine M-02',st:'ok',  temp:'58°C',vib:'1.8', rpm:'2,910',load:'68',h:95,rl:82,w:12,rv:'2,100 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-03-20',nx:'2025-06-15',wo:'None'},
-  'RA-12': {name:'Robot Arm RA-12', st:'ok',  temp:'45°C',vib:'0.4', rpm:'180',  load:'42',h:98,rl:91,w:5, rv:'3,200 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-01',nx:'2025-07-01',wo:'None'},
-  'M-07':  {name:'CNC Machine M-07',st:'dn',  temp:'91°C',vib:'12.4',rpm:'3,100',load:'98',h:31,rl:12,w:78,rv:'82 hrs',   wc:'#d63031',hc:'#d63031',ls:'2025-02-10',nx:'IMMEDIATE',  wo:'WO-441 OPEN'},
-  'CB-03': {name:'Conveyor CB-03',  st:'wn',  temp:'78°C',vib:'5.2', rpm:'450',  load:'87',h:62,rl:28,w:45,rv:'420 hrs',  wc:'#f0a500', hc:'#f0a500', ls:'2025-03-05',nx:'2025-05-20',wo:'WO-438'},
-  'PP-01': {name:'Press PP-01',     st:'ok',  temp:'55°C',vib:'3.1', rpm:'60',   load:'55',h:88,rl:65,w:22,rv:'1,550 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-08',nx:'2025-06-20',wo:'None'},
-  'PP-02': {name:'Press PP-02',     st:'ok',  temp:'52°C',vib:'2.8', rpm:'60',   load:'51',h:91,rl:70,w:18,rv:'1,700 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-10',nx:'2025-06-25',wo:'None'},
-  'WL-01': {name:'Welder WL-01',    st:'ok',  temp:'48°C',vib:'1.2', rpm:'0',    load:'44',h:94,rl:80,w:10,rv:'2,400 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-03-28',nx:'2025-07-05',wo:'None'},
-  'HP-02': {name:'Hydraulic HP-02', st:'wn',  temp:'72°C',vib:'4.8', rpm:'1200', load:'82',h:71,rl:40,w:38,rv:'650 hrs',  wc:'#f0a500', hc:'#f0a500', ls:'2025-03-15',nx:'2025-05-25',wo:'WO-440'},
-  'GR-04': {name:'Grinder GR-04',   st:'ok',  temp:'49°C',vib:'2.6', rpm:'1800', load:'61',h:90,rl:70,w:15,rv:'1,920 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-05',nx:'2025-07-01',wo:'None'},
-  'PT-01': {name:'Paint Booth PT-01',st:'ok', temp:'38°C',vib:'0.8', rpm:'200',  load:'35',h:96,rl:88,w:8, rv:'2,800 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-15',nx:'2025-08-01',wo:'None'},
-  'QC-01': {name:'QC Station QC-01',st:'ok',  temp:'32°C',vib:'0.3', rpm:'0',    load:'22',h:99,rl:95,w:3, rv:'4,000 hrs',wc:'#00b894',hc:'#00b894',ls:'2025-04-20',nx:'2025-09-01',wo:'None'},
+  'M001':{name:'Drill Press Alpha',  type:'DRILLING', st:'ok', temp:'64°C', vib:'0.4', load:'65', eff:'89', h:88, rul:440, oee:85, hc:'#00b894'},
+  'M002':{name:'Assembly Line Beta', type:'ASSEMBLY', st:'ok', temp:'61°C', vib:'0.3', load:'58', eff:'92', h:91, rul:460, oee:88, hc:'#00b894'},
+  'M003':{name:'Weld Station Gamma', type:'WELDING',  st:'ok', temp:'67°C', vib:'0.5', load:'70', eff:'86', h:84, rul:420, oee:82, hc:'#00b894'},
 };
-let selId='CNC-01';
+
+let selId='M001';
+
 function upPanel(id){
-  const d=MD[id];if(!d)return;
+  const d=MD[id]; if(!d) return;
   selId=id;
   document.getElementById('bbS').textContent=id;
-  ['rb-t','rb-v','rb-r','rb-l'].forEach(b=>{const el=document.getElementById(b);el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),600);});
+  ['rb-t','rb-v','rb-r','rb-l'].forEach(b=>{
+    const el=document.getElementById(b);
+    el.classList.add('flash');
+    setTimeout(()=>el.classList.remove('flash'),600);
+  });
   document.getElementById('rpId').textContent='MACHINE ID: '+id;
   document.getElementById('rpNm').textContent=d.name;
   const sb=document.getElementById('rpSt');
@@ -1396,81 +1404,149 @@ function upPanel(id){
   sb.textContent=d.st==='ok'?'OPERATIONAL':d.st==='wn'?'WARNING':'CRITICAL';
   document.getElementById('rpT').innerHTML=d.temp;
   document.getElementById('rpV').innerHTML=d.vib+'<span style="font-size:9px">mm/s</span>';
-  document.getElementById('rpR').textContent=d.rpm;
-  document.getElementById('rpL').innerHTML=d.load+'<span style="font-size:9px">%</span>';
+  document.getElementById('rpR').innerHTML=d.load+'<span style="font-size:9px">%</span>';
+  document.getElementById('rpL').innerHTML=d.eff+'<span style="font-size:9px">%</span>';
   document.getElementById('rpHv').textContent=d.h+'%';
-  const hb=document.getElementById('rpHb');hb.style.width=d.h+'%';hb.style.background=d.hc;
-  document.getElementById('rpRv').textContent=d.rv;
-  document.getElementById('rpRb').style.width=d.rl+'%';
-  document.getElementById('rpWv').textContent=d.w+'%';
-  const wb=document.getElementById('rpWb');wb.style.width=d.w+'%';wb.style.background=d.wc;
-  document.getElementById('rpLs').textContent=d.ls;
-  const nx=document.getElementById('rpNx');nx.textContent=d.nx;nx.style.color=d.nx==='IMMEDIATE'?'var(--dn)':'var(--ac)';
-  const wo=document.getElementById('rpWo');wo.textContent=d.wo;wo.style.color=d.wo==='None'?'var(--t3)':'var(--wn)';
+  const hb=document.getElementById('rpHb'); hb.style.width=d.h+'%'; hb.style.background=d.hc;
+  document.getElementById('rpRv').textContent=d.rul+' hrs';
+  document.getElementById('rpRb').style.width=Math.min(100,d.rul/5)+'%';
+  document.getElementById('rpWv').textContent=d.oee+'%';
+  const wb=document.getElementById('rpWb'); wb.style.width=d.oee+'%';
+  wb.style.background=d.oee>=80?'#00b894':d.oee>=60?'#f0a500':'#d63031';
 }
-function pick(el,id){upPanel(id);}
+
 function snapV(mode,btn){
-  document.querySelectorAll('.vb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
-  if(mode==='persp'){cam.rx=0.42;cam.ry=0.5;cam.dist=15;cam.px=0;cam.py=0;}
+  document.querySelectorAll('.vb').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  if(mode==='persp'){cam.rx=0.42;cam.ry=0.5;cam.dist=14;cam.px=0;cam.py=0;}
   if(mode==='top')  {cam.rx=-1.56;cam.ry=0;cam.dist=18;cam.px=0;cam.py=0;}
   if(mode==='front'){cam.rx=0.01;cam.ry=0;cam.dist=16;cam.px=0;cam.py=0;}
   if(mode==='side') {cam.rx=0.25;cam.ry=1.57;cam.dist=16;cam.px=0;cam.py=0;}
   document.getElementById('bbV').textContent=mode.toUpperCase();
 }
+
 const canvas=document.getElementById('twc');
 function resize(){const w=canvas.parentElement;canvas.width=w.clientWidth;canvas.height=w.clientHeight;}
-resize();window.addEventListener('resize',resize);
+resize(); window.addEventListener('resize',resize);
+
 const gl=canvas.getContext('webgl')||canvas.getContext('experimental-webgl');
 const VS='attribute vec3 aP;attribute vec3 aC;uniform mat4 uM;varying vec3 vC;void main(){gl_Position=uM*vec4(aP,1.0);vC=aC;}';
 const FS='precision mediump float;varying vec3 vC;void main(){gl_FragColor=vec4(vC,1.0);}';
 function mkS(src,t){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s;}
 const prog=gl.createProgram();
-gl.attachShader(prog,mkS(VS,gl.VERTEX_SHADER));gl.attachShader(prog,mkS(FS,gl.FRAGMENT_SHADER));gl.linkProgram(prog);gl.useProgram(prog);
+gl.attachShader(prog,mkS(VS,gl.VERTEX_SHADER));
+gl.attachShader(prog,mkS(FS,gl.FRAGMENT_SHADER));
+gl.linkProgram(prog); gl.useProgram(prog);
 const locP=gl.getAttribLocation(prog,'aP'),locC=gl.getAttribLocation(prog,'aC'),locM=gl.getUniformLocation(prog,'uM');
-const vP=[],vC2=[];const mb=[];
+
+const vP=[],vC2=[]; const mb=[];
+
 function box(cx,cy,cz,w,h,d,r,g,b,mid=null){
-  if(mid)mb.push({id:mid,cx,cy:cy+h/2,cz,hw:w/2,hh:h/2,hd:d/2});
+  if(mid) mb.push({id:mid,cx,cy:cy+h/2,cz,hw:w/2,hh:h/2,hd:d/2});
   const x0=cx-w/2,x1=cx+w/2,y0=cy,y1=cy+h,z0=cz-d/2,z1=cz+d/2;
-  const F=[x0,y0,z1,x1,y0,z1,x1,y1,z1,x0,y0,z1,x1,y1,z1,x0,y1,z1,x1,y0,z0,x0,y0,z0,x0,y1,z0,x1,y0,z0,x0,y1,z0,x1,y1,z0,x0,y0,z0,x0,y0,z1,x0,y1,z1,x0,y0,z0,x0,y1,z1,x0,y1,z0,x1,y0,z1,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z0,x1,y1,z1,x0,y1,z1,x1,y1,z1,x1,y1,z0,x0,y1,z1,x1,y1,z0,x0,y1,z0,x0,y0,z0,x1,y0,z0,x1,y0,z1,x0,y0,z0,x1,y0,z1,x0,y0,z1];
+  const F=[x0,y0,z1,x1,y0,z1,x1,y1,z1,x0,y0,z1,x1,y1,z1,x0,y1,z1,
+           x1,y0,z0,x0,y0,z0,x0,y1,z0,x1,y0,z0,x0,y1,z0,x1,y1,z0,
+           x0,y0,z0,x0,y0,z1,x0,y1,z1,x0,y0,z0,x0,y1,z1,x0,y1,z0,
+           x1,y0,z1,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z0,x1,y1,z1,
+           x0,y1,z1,x1,y1,z1,x1,y1,z0,x0,y1,z1,x1,y1,z0,x0,y1,z0,
+           x0,y0,z0,x1,y0,z0,x1,y0,z1,x0,y0,z0,x1,y0,z1,x0,y0,z1];
   const bri=[0.78,0.62,0.56,0.56,1.0,0.22];
   for(let f=0;f<6;f++){const bv=bri[f];for(let v=0;v<6;v++){const i=(f*6+v)*3;vP.push(F[i],F[i+1],F[i+2]);vC2.push(r*bv,g*bv,b*bv);}}
 }
-for(let x=-6;x<6;x+=0.7)for(let z=-6;z<6;z+=0.7){
+
+// Floor tiles
+for(let x=-7;x<7;x+=0.7) for(let z=-7;z<7;z+=0.7){
   vP.push(x,0,z,x+.7,0,z,x,0,z+.7,x+.7,0,z,x+.7,0,z+.7,x,0,z+.7);
   const cv=(Math.round(x/.7)+Math.round(z/.7))%2===0?.065:.048;
-  for(let i=0;i<6;i++)vC2.push(cv*1.05,cv,cv*.9);
+  for(let i=0;i<6;i++) vC2.push(cv*1.05,cv,cv*.9);
 }
+
+// Structural columns
 const SC=[.07,.065,.055];
-box(-5.5,0,-5.5,.22,3.5,.22,...SC);box(5.5,0,-5.5,.22,3.5,.22,...SC);
-box(-5.5,0,5.5,.22,3.5,.22,...SC);box(5.5,0,5.5,.22,3.5,.22,...SC);
-box(0,0,-5.5,.18,3.5,.18,...SC);box(0,0,5.5,.18,3.5,.18,...SC);
-box(0,3.5,-5.5,12,.08,.16,...SC);box(0,3.5,5.5,12,.08,.16,...SC);
-box(0,3.5,0,12,.08,.1,...SC);
-box(-5.5,3.5,0,.16,.08,12,...SC);box(5.5,3.5,0,.16,.08,12,...SC);
-box(-4.8,0,-1,.07,.4,.07,.55,.42,.0);box(-4.8,0,-2.5,.07,.4,.07,.55,.42,.0);box(-4.8,.35,-1.75,.07,.035,1.5,.55,.42,.0);
-box(4.8,0,1,.07,.4,.07,.55,.42,.0);box(4.8,0,2.5,.07,.4,.07,.55,.42,.0);box(4.8,.35,1.75,.07,.035,1.5,.55,.42,.0);
-box(-4,0,-4.2,.8,1.2,.8,.15,.44,.88,'CNC-01');
-box(-2.4,0,-4.2,.75,.95,.75,.15,.44,.88,'CNC-02');
-box(-.8,0,-4.2,.7,1.5,.7,.06,.64,.44,'RA-12');
-box(-.8,1.5,-4.2,.1,.9,.1,.06,.64,.44);
-box(-4.2,0,0,.8,1.05,.8,.74,.39,.06,'HP-02');
-box(-2.5,0,0,.8,1.05,.8,.80,.2,.18,'M-07');
-box(-2.5,1.05,0,.82,.1,.82,.68,.14,.12);
-box(.3,0,0,3.2,.18,.85,.22,.27,.42,'CB-03');
-box(.3,.18,0,3.2,.05,.85,.26,.31,.5);
-box(-1.3,0,-.2,.1,.18,.1,.18,.2,.35);box(-1.3,0,.2,.1,.18,.1,.18,.2,.35);
-box(1.9,0,-.2,.1,.18,.1,.18,.2,.35);box(1.9,0,.2,.1,.18,.1,.18,.35,.28,.06);
-box(2.5,0,0,.7,.9,.7,.74,.39,.06,'WL-01');
-box(4,0,0,.65,1.1,.65,.15,.44,.88,'PP-01');
-box(3,0,-1.8,.6,1,.6,.15,.44,.88,'PP-02');
-box(-4,0,4,.9,.7,.9,.15,.44,.88,'GR-04');
-box(0,0,4,1.4,.38,3.2,.18,.17,.28,'PT-01');
-box(0,.38,4,1.3,.5,3.0,.14,.13,.24);
-box(2.5,0,4,.75,1.05,.75,.15,.44,.88,'QC-01');
-box(4,0,4,.65,.78,.65,.06,.64,.44);
-const bufP=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,bufP);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vP),gl.STATIC_DRAW);
-const bufC3=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,bufC3);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vC2),gl.STATIC_DRAW);
+box(-6,0,-6,.25,4,.25,...SC); box(6,0,-6,.25,4,.25,...SC);
+box(-6,0,6,.25,4,.25,...SC);  box(6,0,6,.25,4,.25,...SC);
+// Roof beams
+box(0,4,-6,13,.08,.18,...SC); box(0,4,6,13,.08,.18,...SC);
+box(-6,4,0,.18,.08,13,...SC); box(6,4,0,.18,.08,13,...SC);
+box(0,4,0,13,.08,.1,...SC);
+
+// Overhead crane rail
+box(0,3.6,0,12,.12,.12,.18,.18,.22);
+
+// === MACHINE M001: Drill Press Alpha ===
+// Main column body
+box(-3.5,0,0,.9,2.8,.9,.12,.38,.78,'M001');
+// Top head (horizontal arm)
+box(-3.0,2.8,0,1.8,.35,.7,.10,.30,.65);
+// Drill spindle hanging down
+box(-2.5,1.2,0,.18,1.6,.18,.15,.45,.85);
+// Drill bit tip
+box(-2.5,0.8,0,.12,.45,.12,.22,.55,.88);
+// Base plate
+box(-3.5,-0.02,0,1.4,.08,1.2,.08,.25,.55);
+// Control panel on side
+box(-4.1,1.2,0,.12,.6,.5,.55,.50,.12);
+// Small detail: coolant nozzle
+box(-2.5,1.6,.25,.05,.3,.05,.4,.7,.9);
+
+// === MACHINE M002: Assembly Line Beta ===
+// Long conveyor frame
+box(1.5,0,0,3.8,.2,1.0,.45,.22,.08,'M002');
+// Conveyor belt surface
+box(1.5,.2,0,3.8,.06,.85,.35,.18,.06);
+// Support legs
+box(0.2,0,0,.12,.2,.9,.3,.15,.05);
+box(1.5,0,0,.12,.2,.9,.3,.15,.05);
+box(2.8,0,0,.12,.2,.9,.3,.15,.05);
+// Robot arm above conveyor
+box(1.5,.26,-.2,.1,1.2,.1,.55,.42,.08);
+box(1.5,1.46,-.2,.8,.1,.1,.55,.42,.08);
+box(2.3,1.26,-.2,.1,.22,.1,.55,.42,.08);
+// Pick end effector
+box(2.3,1.06,-.2,.25,.08,.2,.7,.55,.1);
+// Control terminal
+box(0.0,.0,-.7,.4,1.1,.35,.18,.17,.28);
+box(0.0,1.1,-.7,.38,.5,.32,.14,.13,.24);
+// Parts bin
+box(3.0,.0,.55,.5,.35,.4,.22,.20,.18);
+
+// === MACHINE M003: Weld Station Gamma ===
+// Welding table
+box(-1.5,0,3.5,1.4,.12,1.2,.3,.28,.26,'M003');
+// Table legs
+box(-2.1,0,3.0,.1,.7,.1,.22,.20,.18); box(-0.9,0,3.0,.1,.7,.1,.22,.20,.18);
+box(-2.1,0,4.0,.1,.7,.1,.22,.20,.18); box(-0.9,0,4.0,.1,.7,.1,.22,.20,.18);
+// Welding robot arm base
+box(-1.5,.12,3.5,.35,1.0,.35,.45,.22,.08);
+// Robot arm segment 1
+box(-1.5,1.12,3.5,.12,.9,.12,.55,.28,.1);
+// Robot arm segment 2 (angled)
+box(-1.2,1.9,3.3,.12,.7,.12,.55,.28,.1);
+// Weld torch
+box(-1.05,2.5,3.2,.06,.4,.06,.7,.65,.15);
+// Weld flash (bright yellow)
+box(-1.05,2.45,3.2,.15,.08,.15,.95,.85,.1);
+// Welding shield/shroud
+box(-1.5,.12,2.9,.6,.8,.08,.18,.16,.14);
+// Fume extractor hose
+box(-2.0,1.5,3.5,.08,.8,.08,.25,.24,.22);
+box(-2.0,2.3,3.5,.5,.08,.08,.25,.24,.22);
+// Gas cylinder
+box(-2.4,0,3.5,.22,1.1,.22,.35,.34,.36);
+box(-2.4,1.1,3.5,.24,.12,.24,.45,.44,.46);
+
+// Safety barriers between machines
+box(-0.5,0,0,.08,.55,2.5,.55,.42,.05);
+box(0.5,0,0,.08,.55,2.5,.55,.42,.05);
+// Yellow floor markings (flat boxes)
+box(-3.5,0.01,0,2.2,.01,2.2,.9,.75,.05);
+box(1.5,0.01,0,4.5,.01,1.8,.9,.75,.05);
+box(-1.5,0.01,3.5,2.2,.01,2.0,.9,.75,.05);
+
+const bufP=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,bufP); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vP),gl.STATIC_DRAW);
+const bufC3=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,bufC3); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vC2),gl.STATIC_DRAW);
 const NV=vP.length/3;
+
+// Highlight shader
 const hp=gl.createProgram();
 function mkS2(src,t){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s;}
 gl.attachShader(hp,mkS2('attribute vec3 aP;uniform mat4 uM;void main(){gl_Position=uM*vec4(aP,1.0);}',gl.VERTEX_SHADER));
@@ -1478,15 +1554,20 @@ gl.attachShader(hp,mkS2('precision mediump float;uniform vec3 uC;void main(){gl_
 gl.linkProgram(hp);
 const hlP=gl.getAttribLocation(hp,'aP'),hlM=gl.getUniformLocation(hp,'uM'),hlC=gl.getUniformLocation(hp,'uC');
 const hlBuf=gl.createBuffer();
-function wbox(cx,cy,cz,w,h,d,p=0.06){
+
+function wbox(cx,cy,cz,w,h,d,p=0.08){
   const x0=cx-w/2-p,x1=cx+w/2+p,y0=cy-p,y1=cy+h+p,z0=cz-d/2-p,z1=cz+d/2+p;
-  return new Float32Array([x0,y0,z0,x1,y0,z0,x1,y0,z0,x1,y0,z1,x1,y0,z1,x0,y0,z1,x0,y0,z1,x0,y0,z0,x0,y1,z0,x1,y1,z0,x1,y1,z0,x1,y1,z1,x1,y1,z1,x0,y1,z1,x0,y1,z1,x0,y1,z0,x0,y0,z0,x0,y1,z0,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z1,x0,y0,z1,x0,y1,z1]);
+  return new Float32Array([x0,y0,z0,x1,y0,z0,x1,y0,z0,x1,y0,z1,x1,y0,z1,x0,y0,z1,x0,y0,z1,x0,y0,z0,
+    x0,y1,z0,x1,y1,z0,x1,y1,z0,x1,y1,z1,x1,y1,z1,x0,y1,z1,x0,y1,z1,x0,y1,z0,
+    x0,y0,z0,x0,y1,z0,x1,y0,z0,x1,y1,z0,x1,y0,z1,x1,y1,z1,x0,y0,z1,x0,y1,z1]);
 }
+
 function mul4(a,b){const o=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){o[j*4+i]=0;for(let k=0;k<4;k++)o[j*4+i]+=a[k*4+i]*b[j*4+k];}return o;}
 function mP(fov,asp,n,f){const t=1/Math.tan(fov/2),o=new Float32Array(16);o[0]=t/asp;o[5]=t;o[10]=(f+n)/(n-f);o[11]=-1;o[14]=2*f*n/(n-f);return o;}
 function mRX(a){const c=Math.cos(a),s=Math.sin(a),o=new Float32Array(16);o[0]=1;o[5]=c;o[6]=-s;o[9]=s;o[10]=c;o[15]=1;return o;}
 function mRY(a){const c=Math.cos(a),s=Math.sin(a),o=new Float32Array(16);o[0]=c;o[2]=s;o[5]=1;o[8]=-s;o[10]=c;o[15]=1;return o;}
 function mT(x,y,z){const o=new Float32Array(16);o[0]=1;o[5]=1;o[10]=1;o[15]=1;o[12]=x;o[13]=y;o[14]=z;return o;}
+
 function invM(m){
   const v=new Float32Array(16);
   v[0]=m[5]*m[10]*m[15]-m[5]*m[11]*m[14]-m[9]*m[6]*m[15]+m[9]*m[7]*m[14]+m[13]*m[6]*m[11]-m[13]*m[7]*m[10];
@@ -1506,13 +1587,15 @@ function invM(m){
   v[11]=-m[0]*m[5]*m[11]+m[0]*m[7]*m[9]+m[4]*m[1]*m[11]-m[4]*m[3]*m[9]-m[8]*m[1]*m[7]+m[8]*m[3]*m[5];
   v[15]=m[0]*m[5]*m[10]-m[0]*m[6]*m[9]-m[4]*m[1]*m[10]+m[4]*m[2]*m[9]+m[8]*m[1]*m[6]-m[8]*m[2]*m[5];
   const det=m[0]*v[0]+m[1]*v[4]+m[2]*v[8]+m[3]*v[12];
-  if(Math.abs(det)<1e-8)return null;const di=1/det;for(let i=0;i<16;i++)v[i]*=di;return v;
+  if(Math.abs(det)<1e-8) return null;
+  const di=1/det; for(let i=0;i<16;i++) v[i]*=di; return v;
 }
+
 function ray(mx,my,mvp){
   const nx=(mx/canvas.width)*2-1,ny=1-(my/canvas.height)*2;
-  const iv=invM(mvp);if(!iv)return null;
+  const iv=invM(mvp); if(!iv) return null;
   function up(x,y,z){const v=[x,y,z,1],r=[0,0,0,0];for(let i=0;i<4;i++)for(let j=0;j<4;j++)r[i]+=iv[j*4+i]*v[j];if(Math.abs(r[3])<1e-8)return null;return[r[0]/r[3],r[1]/r[3],r[2]/r[3]];}
-  const nr=up(nx,ny,-1),fr=up(nx,ny,1);if(!nr||!fr)return null;
+  const nr=up(nx,ny,-1),fr=up(nx,ny,1); if(!nr||!fr) return null;
   const dx=fr[0]-nr[0],dy=fr[1]-nr[1],dz=fr[2]-nr[2],l=Math.sqrt(dx*dx+dy*dy+dz*dz);
   return{ox:nr[0],oy:nr[1],oz:nr[2],dx:dx/l,dy:dy/l,dz:dz/l};
 }
@@ -1522,19 +1605,20 @@ function rayAABB(r,b){
   const tz0=(b.cz-b.hd-r.oz)/r.dz,tz1=(b.cz+b.hd-r.oz)/r.dz;
   const tmin=Math.max(Math.min(tx0,tx1),Math.min(ty0,ty1),Math.min(tz0,tz1));
   const tmax=Math.min(Math.max(tx0,tx1),Math.max(ty0,ty1),Math.max(tz0,tz1));
-  if(tmax<0||tmin>tmax)return Infinity;return tmin>0?tmin:tmax;
+  if(tmax<0||tmin>tmax) return Infinity; return tmin>0?tmin:tmax;
 }
 function pickM(mx,my){
-  const r=ray(mx,my,curMVP);if(!r)return null;
+  const r=ray(mx,my,curMVP); if(!r) return null;
   let cl=null,ct=Infinity;
-  for(const b of mb){const t=rayAABB(r,b);if(t<ct){ct=t;cl=b.id;}}
+  for(const b of mb){const t=rayAABB(r,b);if(t<ct){ct=t;cl=b;}}
   return ct<100?cl:null;
 }
+
 const ttEl=document.getElementById('twtt'),hlEl=document.getElementById('hlbl');
 let lastH=null;
 function chkH(mx,my){
   if(drag){hlEl.classList.remove('show');return;}
-  const r=ray(mx,my,curMVP);if(!r)return;
+  const r=ray(mx,my,curMVP); if(!r) return;
   let cl=null,ct=Infinity;
   for(const b of mb){const t=rayAABB(r,b);if(t<ct){ct=t;cl=b;}}
   if(cl&&ct<100){
@@ -1543,55 +1627,63 @@ function chkH(mx,my){
   }else{lastH=null;hlEl.classList.remove('show');canvas.style.cursor=drag?'grabbing':'crosshair';}
 }
 function showTT(id,mx,my){
-  const d=MD[id];if(!d)return;
+  const d=MD[id]; if(!d) return;
   document.getElementById('ttN').textContent=d.name;
   document.getElementById('ttT').textContent=d.temp;
   document.getElementById('ttV').textContent=d.vib+' mm/s';
   document.getElementById('ttL').textContent=d.load+'%';
   document.getElementById('ttH').textContent=d.h+'%';
   const st=document.getElementById('ttS');
-  st.className='tt-st tt-'+d.st;st.textContent=d.st==='ok'?'● OPERATIONAL':d.st==='wn'?'▲ WARNING':'✖ CRITICAL';
+  st.className='tt-st tt-'+d.st;
+  st.textContent=d.st==='ok'?'● OPERATIONAL':d.st==='wn'?'▲ WARNING':'✖ CRITICAL';
   let tx=mx+14,ty=my-18;
-  if(tx+190>window.innerWidth)tx=mx-210;if(ty+130>window.innerHeight)ty=my-140;
+  if(tx+190>window.innerWidth) tx=mx-210;
+  if(ty+130>window.innerHeight) ty=my-140;
   ttEl.style.left=tx+'px';ttEl.style.top=ty+'px';ttEl.classList.add('show');
 }
 function hideTT(){ttEl.classList.remove('show');}
-const cam={rx:0.42,ry:0.5,dist:15,px:0,py:0};
+
+const cam={rx:0.42,ry:0.5,dist:14,px:0,py:0};
 let drag=false,sh=false,lx=0,ly=0,curMVP=new Float32Array(16);
+
 canvas.addEventListener('mousedown',e=>{drag=true;sh=e.shiftKey;lx=e.clientX;ly=e.clientY;hideTT();e.preventDefault();});
 window.addEventListener('mouseup',e=>{
   const dx2=Math.abs(e.clientX-lx),dy2=Math.abs(e.clientY-ly);
   if(drag&&dx2<5&&dy2<5){
     const rect=canvas.getBoundingClientRect();
     const hit=pickM(e.clientX-rect.left,e.clientY-rect.top);
-    if(hit){upPanel(hit);showTT(hit,e.clientX,e.clientY);rpl(e.clientX,e.clientY);}else hideTT();
+    if(hit){upPanel(hit.id);showTT(hit.id,e.clientX,e.clientY);doRpl(e.clientX,e.clientY);}
+    else hideTT();
   }
   drag=false;canvas.style.cursor='crosshair';
 });
 window.addEventListener('mousemove',e=>{
-  if(drag){const dx2=e.clientX-lx,dy2=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+  if(drag){
+    const dx2=e.clientX-lx,dy2=e.clientY-ly;lx=e.clientX;ly=e.clientY;
     if(sh||e.buttons===4){cam.px+=dx2*.014;cam.py-=dy2*.014;}
     else{cam.ry+=dx2*.007;cam.rx+=dy2*.005;cam.rx=Math.max(-1.56,Math.min(.2,cam.rx));}
     canvas.style.cursor='grabbing';
   }else{const rect=canvas.getBoundingClientRect();chkH(e.clientX-rect.left,e.clientY-rect.top);}
 });
 canvas.addEventListener('wheel',e=>{cam.dist=Math.max(4,Math.min(30,cam.dist+e.deltaY*.022));document.getElementById('bbZ').textContent=Math.round(1200/cam.dist)+'%';},{passive:true});
-function rpl(x,y){const r=document.createElement('div');r.className='rpl';r.style.left=x+'px';r.style.top=y+'px';document.body.appendChild(r);setTimeout(()=>r.remove(),500);}
+
+function doRpl(x,y){const r=document.createElement('div');r.className='rpl';r.style.left=x+'px';r.style.top=y+'px';document.body.appendChild(r);setTimeout(()=>r.remove(),500);}
+
 let fc=0,ft=performance.now();
 function frame(){
   requestAnimationFrame(frame);
   const wrap=canvas.parentElement;
-  if(canvas.width!==wrap.clientWidth||canvas.height!==wrap.clientHeight)resize();
+  if(canvas.width!==wrap.clientWidth||canvas.height!==wrap.clientHeight) resize();
   gl.viewport(0,0,canvas.width,canvas.height);
   gl.clearColor(.038,.044,.060,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
   const proj=mP(.76,canvas.width/canvas.height,.1,80);
   const view=mul4(mT(cam.px,cam.py-1.2,-cam.dist),mul4(mRX(cam.rx),mRY(cam.ry)));
-  const mvp=mul4(proj,view);curMVP=mvp;
-  gl.useProgram(prog);gl.uniformMatrix4fv(locM,false,mvp);
-  gl.bindBuffer(gl.ARRAY_BUFFER,bufP);gl.enableVertexAttribArray(locP);gl.vertexAttribPointer(locP,3,gl.FLOAT,false,0,0);
-  gl.bindBuffer(gl.ARRAY_BUFFER,bufC3);gl.enableVertexAttribArray(locC);gl.vertexAttribPointer(locC,3,gl.FLOAT,false,0,0);
+  const mvp=mul4(proj,view); curMVP=mvp;
+  gl.useProgram(prog); gl.uniformMatrix4fv(locM,false,mvp);
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufP); gl.enableVertexAttribArray(locP); gl.vertexAttribPointer(locP,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufC3); gl.enableVertexAttribArray(locC); gl.vertexAttribPointer(locC,3,gl.FLOAT,false,0,0);
   gl.drawArrays(gl.TRIANGLES,0,NV);
   const sel=mb.find(b=>b.id===selId);
   if(sel){
@@ -1599,15 +1691,15 @@ function frame(){
     const d=MD[selId];
     const col=d?.st==='dn'?[.84,.19,.19]:d?.st==='wn'?[.94,.65,.0]:[.94,.65,.0];
     const wf=wbox(sel.cx,sel.cy-sel.hh,sel.cz,sel.hw*2,sel.hh*2,sel.hd*2);
-    gl.bindBuffer(gl.ARRAY_BUFFER,hlBuf);gl.bufferData(gl.ARRAY_BUFFER,wf,gl.DYNAMIC_DRAW);
-    gl.useProgram(hp);gl.uniformMatrix4fv(hlM,false,mvp);
+    gl.bindBuffer(gl.ARRAY_BUFFER,hlBuf); gl.bufferData(gl.ARRAY_BUFFER,wf,gl.DYNAMIC_DRAW);
+    gl.useProgram(hp); gl.uniformMatrix4fv(hlM,false,mvp);
     gl.uniform3f(hlC,col[0]*pulse,col[1]*pulse,col[2]*pulse);
-    gl.enableVertexAttribArray(hlP);gl.vertexAttribPointer(hlP,3,gl.FLOAT,false,0,0);
+    gl.enableVertexAttribArray(hlP); gl.vertexAttribPointer(hlP,3,gl.FLOAT,false,0,0);
     gl.drawArrays(gl.LINES,0,24);
   }
   fc++;const now=performance.now();if(now-ft>=1000){document.getElementById('bbF').textContent=fc;fc=0;ft=now;}
 }
-frame();upPanel('CNC-01');
+frame(); upPanel('M001');
 </script>
 """
 
