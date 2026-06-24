@@ -229,7 +229,8 @@ def get_failure_timeline(rt,v,o,t,p):
     hrs=[0,10,25,50,75,100,150,200]; probs=[]
     for h in hrs:
         fv=min(100,v+(h/5000)*40); fo=max(5,o-h*0.05); ft=min(140,t+h*0.02)
-        probs.append(round(ml_model.predict_proba(np.array([[ft,fv,min(200,80+fv*0.6),min(5000,rt+h),fo]]))[0][1]*100,1))
+        fp=min(200,p+(h/5000)*25)  # project actual pressure forward instead of faking it from vibration
+        probs.append(round(ml_model.predict_proba(np.array([[ft,fv,fp,min(5000,rt+h),fo]]))[0][1]*100,1))
     return hrs,probs
 
 def get_action(risk,v,t,o,p,rul):
@@ -459,6 +460,28 @@ hr{border:none;border-top:1px solid var(--b1);margin:16px 0;}
 .qn:hover{border-color:var(--ac);color:var(--tx);}
 .qni{color:var(--ac);flex-shrink:0;}
 .qnd{font-size:10px;color:var(--t3);margin-top:1px;}
+
+/* ── RESPONSIVE BREAKPOINTS ─────────────────────────────────────────────── */
+@media (max-width:1280px){
+  .g4{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:1024px){
+  .sb{width:190px;}
+  .mn{margin-left:190px;padding:22px 18px;}
+  .g3{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:860px){
+  .sb{position:fixed;left:-220px;transition:left 0.2s;width:220px;}
+  .sb.open{left:0;}
+  .mn{margin-left:0;padding:18px 14px;}
+  .g4,.g3,.g2{grid-template-columns:1fr;}
+  .mg{grid-template-columns:1fr;}
+  .mobile-menu-btn{display:flex;}
+}
+@media (min-width:861px){
+  .mobile-menu-btn{display:none;}
+}
+.mobile-menu-btn{position:fixed;top:10px;left:10px;z-index:200;width:36px;height:36px;background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);align-items:center;justify-content:center;color:var(--tx);cursor:pointer;}
 """
 
 
@@ -476,6 +499,7 @@ ICONS = {
     "report":   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
     "settings": '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
     "logout":   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    "bell":     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
 }
 
 def H(title, refresh=0):
@@ -486,6 +510,8 @@ def sidebar(active):
     sc = scenario["mode"]
     ml_cls = "nml" if ML_AVAILABLE else "nml off"
     ml_txt = "ML LIVE" if ML_AVAILABLE else "ML OFF"
+    unread = sum(1 for n in notifications if not n.get("read"))
+    bell_tag = f'<span class="ntag" style="color:var(--dn)">{unread}</span>' if unread else ""
     mlinks = "".join([
         f'<a href="/machine/{m.name}" class="na {"active" if active==m.name else ""}">'
         f'{ICONS["machine"]}<span>{m.display_name}</span>'
@@ -498,7 +524,8 @@ def sidebar(active):
                        for k,c,label in sc_items])
     def na(key, href, label, extra=""):
         return f'<a href="{href}" class="na {"active" if active==key else ""}">{ICONS[key]}<span>{label}</span>{extra}</a>'
-    return f"""<nav class="sb">
+    return f"""<div class="mobile-menu-btn" onclick="document.querySelector('.sb').classList.toggle('open')">☰</div>
+<nav class="sb">
   <div class="sb-head">
     <div class="logo"><div class="logo-icon">{ICONS["cpu"]}</div><span class="logo-name">FACTORYOS</span></div>
     <div class="logo-sub">SMART FACTORY PLATFORM</div>
@@ -508,6 +535,7 @@ def sidebar(active):
     {na("home","/","Dashboard")}
     <a href="/twin" class="na {"active" if active=="twin" else ""}">{ICONS["twin"]}<span>3D Twin</span></a>
     <a href="/predict" class="na {"active" if active=="predict" else ""}">{ICONS["pred"]}<span>AI Predict</span><span class="{ml_cls}">{ml_txt}</span></a>
+    <a href="/notifications" class="na {"active" if active=="notif" else ""}">{ICONS["bell"]}<span>Notifications</span>{bell_tag}</a>
     <div class="nl">Monitor</div>
     {na("alert","/alerts","Alerts")}
     {na("analytics","/analytics","Analytics")}
@@ -674,6 +702,35 @@ def home():
 def twin():
     return H("3D Digital Twin") + sidebar("twin") + TWIN_PAGE + "</body></html>"
 
+# ── NOTIFICATIONS ──────────────────────────────────────────────────────────────
+@app.route("/notifications")
+@login_required
+def notifications_page():
+    rows = ""
+    for n in sorted(notifications, key=lambda x: x["id"], reverse=True)[:100]:
+        lvl_cls = {"danger":"critical","info":"info","warning":"warning"}.get(n.get("level","info"),"info")
+        read_style = "opacity:0.5;" if n.get("read") else ""
+        rows += f"""<div class="ar" style="{read_style}padding:11px 0">
+  <div class="ad {lvl_cls}"></div>
+  <div class="am">
+    <div style="font-weight:600;color:var(--tx);margin-bottom:2px">{n['title']}</div>
+    <div>{n['message']}</div>
+    <div style="font-size:9px;color:var(--t3);margin-top:3px;font-family:'Space Mono',monospace">{n['timestamp']}</div>
+  </div>
+</div>"""
+    if not rows:
+        rows = "<div style='color:var(--t3);font-size:11px;text-align:center;padding:30px;font-family:Space Mono,monospace'>No notifications yet — they'll appear here on failure predictions and maintenance logs.</div>"
+    for n in notifications: n["read"] = True
+    return H("Notifications")+f"""
+{sidebar("notif")}
+<main class="mn">
+  <div class="ph"><div class="hr">
+    <div><div class="pt">{ICONS["bell"]} Notifications</div>
+    <div class="ps">{len(notifications)} TOTAL · AI PREDICTIONS + MAINTENANCE EVENTS</div></div>
+  </div></div>
+  <div class="card">{rows}</div>
+</main></body></html>"""
+
 # ── AI PREDICTIONS ────────────────────────────────────────────────────────────
 @app.route("/predict", methods=["GET","POST"])
 @login_required
@@ -766,6 +823,18 @@ def predict():
 <td style="font-family:'Space Mono',monospace">{p.get("rul","—")}h</td>
 </tr>''' for p in pred_history[-10:][::-1]])
 
+    fi_rows = ""
+    if ML_AVAILABLE and hasattr(ml_model,"feature_importances_"):
+        fi_labels=["Temperature","Vibration","Pressure","Runtime Hours","Oil Level"]
+        fi_vals=ml_model.feature_importances_
+        fi_pairs=sorted(zip(fi_labels,fi_vals), key=lambda x:-x[1])
+        for lbl,val in fi_pairs:
+            pct=round(val*100,1)
+            fi_rows+=f"""<div style="margin-bottom:9px">
+<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--t2)">{lbl}</span><span class="mv">{pct}%</span></div>
+<div class="rb"><div class="rbf" style="width:{pct}%;background:var(--ac)"></div></div>
+</div>"""
+
     return H("AI Predictions")+f"""
 {sidebar("predict")}
 <main class="mn">
@@ -791,6 +860,7 @@ def predict():
         </form>
       </div>
       {result_html}
+      {"" if not fi_rows else f'<div class="card" style="margin-top:12px"><div class="ct">Model Feature Importance</div><div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;line-height:1.5">What the Random Forest actually weighs when predicting failure — vibration and oil level dominate, consistent with real bearing-wear and lubrication-failure patterns.</div>{fi_rows}</div>'}
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
@@ -1050,17 +1120,32 @@ def reports():
 @admin_required
 def settings():
     success=""
+    error=""
     if request.method=="POST":
+        new_names = {}
         for k in machines:
             v=request.form.get(f"name_{k}","").strip()
-            if v and len(v)>=3: machines[k].display_name=v
-        thresholds['temperature']=float(request.form.get("thr_temp",85))
-        thresholds['vibration']=float(request.form.get("thr_vib",1.8))
-        thresholds['pressure']=float(request.form.get("thr_pres",3.0))
-        thresholds['oil_level']=float(request.form.get("thr_oil",40))
-        nu=request.form.get("new_username","").strip(); np2=request.form.get("new_password","").strip()
-        if nu and np2: users[nu]={"password":generate_password_hash(np2),"role":request.form.get("new_role","viewer")}
-        success="Settings saved."
+            if v and len(v)>=3: new_names[k]=v
+        seen={}
+        dup=False
+        for k,v in new_names.items():
+            lv=v.lower()
+            if lv in seen and seen[lv]!=k: dup=True; break
+            seen[lv]=k
+        for mid,other in machines.items():
+            if mid in new_names: continue
+            if other.display_name.lower() in seen: dup=True; break
+        if dup:
+            error="Two machines can't share the same name."
+        else:
+            for k,v in new_names.items(): machines[k].display_name=v
+            thresholds['temperature']=float(request.form.get("thr_temp",85))
+            thresholds['vibration']=float(request.form.get("thr_vib",1.8))
+            thresholds['pressure']=float(request.form.get("thr_pres",3.0))
+            thresholds['oil_level']=float(request.form.get("thr_oil",40))
+            nu=request.form.get("new_username","").strip(); np2=request.form.get("new_password","").strip()
+            if nu and np2: users[nu]={"password":generate_password_hash(np2),"role":request.form.get("new_role","viewer")}
+            success="Settings saved."
     fields="".join([f'<div class="fg"><label class="fl">{m.display_name}</label><input class="fi" type="text" name="name_{k}" value="{m.display_name}"/></div>' for k,m in machines.items()])
     user_rows="".join([f"<tr><td style='font-family:Space Mono,monospace'>{u}</td><td><span class='st {'st-fail' if d['role']=='admin' else 'st-maint'}'>{d['role'].upper()}</span></td></tr>" for u,d in users.items()])
     return H("Settings")+f"""
@@ -1069,6 +1154,7 @@ def settings():
   <div class="ph"><div class="pt">{ICONS["settings"]} Settings</div>
   <div class="ps">ADMIN ONLY · MACHINE NAMES · THRESHOLDS · USER MANAGEMENT</div></div>
   {"" if not success else f'<div class="nx nx-o" style="margin-bottom:14px">{success}</div>'}
+  {"" if not error else f'<div class="nx nx-d" style="margin-bottom:14px">{error}</div>'}
   <div class="g2">
     <div>
       <div class="card" style="margin-bottom:12px"><div class="ct">Machine Names</div>
@@ -1104,6 +1190,8 @@ def settings():
 </main></body></html>"""
 
 # ── ADD / DECOMMISSION ────────────────────────────────────────────────────────
+LOAD_RANGES = {"Low": (28, 48), "Medium": (45, 65), "High": (68, 86)}
+
 @app.route("/add-machine", methods=["GET","POST"])
 @login_required
 def add_machine():
@@ -1116,7 +1204,10 @@ def add_machine():
         elif mtype not in MACHINE_TYPES: error="Invalid machine type."
         else:
             machine_counter["count"]+=1; mid=f"M{machine_counter['count']:03d}"
-            machines[mid]=Machine(mid,name,mtype,load)
+            new_m=Machine(mid,name,mtype,load)
+            lo,hi=LOAD_RANGES.get(load,(45,65))
+            new_m.load=random.uniform(lo,hi)
+            machines[mid]=new_m
             alert_log.insert(0,{"sev":"info","msg":f"[{datetime.now().strftime('%H:%M:%S')}] {name} commissioned"})
             return redirect("/")
     type_opts="".join([f'<option value="{t}">{t}</option>' for t in MACHINE_TYPES])
@@ -1313,6 +1404,11 @@ TWIN_PAGE = """
 .ch2{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);display:flex;gap:7px;pointer-events:none;z-index:5;}
 .ck{display:flex;align-items:center;gap:4px;background:rgba(15,15,15,0.8);border:1px solid var(--b1);padding:3px 8px;border-radius:2px;font-size:9px;color:var(--t3);letter-spacing:1px;font-family:'Space Mono',monospace;}
 .ck kbd{background:var(--s2);border:1px solid var(--b2);padding:1px 5px;border-radius:2px;font-size:8px;color:var(--ac);}
+@media (max-width:860px){
+  .ts{left:0;}
+  .trp{position:fixed;right:-240px;top:0;bottom:0;transition:right 0.2s;z-index:50;}
+  .trp.open{right:0;}
+}
 </style>
 
 <div class="tt" id="twtt">
