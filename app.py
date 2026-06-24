@@ -6,7 +6,7 @@ Merged: FactoryOS + Predictive Maintenance AI + DigitTwin
 from flask import Flask, request, redirect, session, Response, jsonify
 import random
 from datetime import datetime, timedelta
-import io, time, math, pickle, numpy as np
+import io, time, math, pickle, json, numpy as np
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -700,7 +700,15 @@ def home():
 @app.route("/twin")
 @login_required
 def twin():
-    return H("3D Digital Twin") + sidebar("twin") + TWIN_PAGE + "</body></html>"
+    update_machines()
+    mdata = [{
+        "id": m.name, "name": m.display_name, "type": m.machine_type,
+        "state": m.state, "temp": round(m.temp,1), "vib": round(m.vibration,2),
+        "load": round(m.load), "eff": round(m.efficiency), "health": round(m.health_score),
+        "rul": m.rul, "oee": m.oee
+    } for m in machines.values()]
+    page = TWIN_PAGE.replace("__MACHINES_JSON__", json.dumps(mdata))
+    return H("3D Digital Twin") + sidebar("twin") + page + "</body></html>"
 
 # ── NOTIFICATIONS ──────────────────────────────────────────────────────────────
 @app.route("/notifications")
@@ -1182,7 +1190,7 @@ def settings():
       <hr>
       <div class="ct" style="margin-bottom:8px">System Info</div>
       <div class="mr"><span class="mk">ML Model</span><span class="mv" style="color:{'var(--ok)' if ML_AVAILABLE else 'var(--wn)'}">{"Active — Random Forest" if ML_AVAILABLE else "Offline — model.pkl missing"}</span></div>
-      <div class="mr"><span class="mk">Machines</span><span class="mv">{len(machines)} / 100</span></div>
+      <div class="mr"><span class="mk">Machines</span><span class="mv">{len(machines)} / {MAX_MACHINES}</span></div>
       <div class="mr"><span class="mk">Predictions run</span><span class="mv">{len(pred_history)}</span></div>
       <div class="mr"><span class="mk">Alert log</span><span class="mv">{len(alert_log)} entries</span></div>
     </div>
@@ -1192,11 +1200,13 @@ def settings():
 # ── ADD / DECOMMISSION ────────────────────────────────────────────────────────
 LOAD_RANGES = {"Low": (28, 48), "Medium": (45, 65), "High": (68, 86)}
 
+MAX_MACHINES = 6
+
 @app.route("/add-machine", methods=["GET","POST"])
 @login_required
 def add_machine():
     error=""
-    if len(machines)>=100: error="Maximum 100 machines reached."
+    if len(machines)>=MAX_MACHINES: error=f"Maximum {MAX_MACHINES} machines reached (limit keeps the 3D Digital Twin readable)."
     if request.method=="POST" and not error:
         name=request.form.get("display_name","").strip(); mtype=request.form.get("machine_type","Assembly"); load=request.form.get("initial_load","Medium")
         if not name or len(name)<3:      error="Name must be at least 3 characters."
@@ -1214,7 +1224,7 @@ def add_machine():
     return H("Commission Machine")+f"""
 {sidebar("add")}
 <main class="mn">
-  <div class="ph"><div class="pt">{ICONS["add"]} Commission Machine</div><div class="ps">CAPACITY: {len(machines)}/100</div></div>
+  <div class="ph"><div class="pt">{ICONS["add"]} Commission Machine</div><div class="ps">CAPACITY: {len(machines)}/{MAX_MACHINES}</div></div>
   {"" if not error else f'<div class="nx nx-d" style="margin-bottom:14px">{error}</div>'}
   <div class="card" style="max-width:480px">
     <div class="nx nx-i" style="margin-bottom:14px">Machine begins live simulation immediately on commission.</div>
@@ -1472,18 +1482,26 @@ TWIN_PAGE = """
     <div class="bs">Selected <b id="bbS">M001</b></div>
     <div class="bs">Zoom <b id="bbZ">100%</b></div>
     <div class="bs">View <b id="bbV">PERSPECTIVE</b></div>
-    <div class="bs">Machines <b>3 active</b></div>
+    <div class="bs">Machines <b id="bbN">0 active</b></div>
     <div class="bs" style="margin-left:auto">FPS <b id="bbF">--</b></div>
   </div>
 </div>
 
 <script>
-const MD={
-  'M001':{name:'Drill Press Alpha',  type:'DRILLING', st:'ok', temp:'64°C', vib:'0.4', load:'65', eff:'89', h:88, rul:440, oee:85, hc:'#00b894'},
-  'M002':{name:'Assembly Line Beta', type:'ASSEMBLY', st:'ok', temp:'61°C', vib:'0.3', load:'58', eff:'92', h:91, rul:460, oee:88, hc:'#00b894'},
-  'M003':{name:'Weld Station Gamma', type:'WELDING',  st:'ok', temp:'67°C', vib:'0.5', load:'70', eff:'86', h:84, rul:420, oee:82, hc:'#00b894'},
-};
-let selId='M001';
+const MACHINES = __MACHINES_JSON__;
+const STATE_CLASS = {Running:'ok',Warning:'wn',Overloaded:'wn',Failure:'dn',Maintenance:'wn'};
+const TYPE_COLOR  = {Drilling:[0.62,0.40,0.17],Assembly:[0.24,0.46,0.74],Welding:[0.72,0.24,0.21],
+                      Packaging:[0.32,0.58,0.36],Cutting:[0.52,0.30,0.64],Pressing:[0.60,0.55,0.20],Grinding:[0.66,0.42,0.50]};
+const STATE_RGB   = {Running:[0,0.72,0.58],Warning:[0.94,0.65,0],Overloaded:[0.88,0.44,0.19],Failure:[0.84,0.19,0.19],Maintenance:[0.04,0.52,0.89]};
+function healthHex(h){return h>=75?'#00b894':h>=50?'#f0a500':'#d63031';}
+
+const MD={};
+MACHINES.forEach(m=>{
+  MD[m.id]={name:m.name,type:m.type.toUpperCase(),st:STATE_CLASS[m.state]||'ok',temp:m.temp+'°C',vib:m.vib,
+            load:m.load,eff:m.eff,h:m.health,rul:m.rul,oee:m.oee,hc:healthHex(m.health)};
+});
+document.getElementById('bbN').textContent=MACHINES.length+' active';
+let selId=MACHINES.length?MACHINES[0].id:'M001';
 
 function upPanel(id){
   const d=MD[id]; if(!d)return; selId=id;
@@ -1509,10 +1527,10 @@ function upPanel(id){
 
 function snapV(mode,btn){
   document.querySelectorAll('.vb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
-  if(mode==='persp'){tgt.rx=0.38;tgt.ry=0.55;tgt.dist=16;tgt.px=0;tgt.py=0;}
-  if(mode==='top')  {tgt.rx=-1.55;tgt.ry=0;tgt.dist=20;tgt.px=0;tgt.py=0;}
-  if(mode==='front'){tgt.rx=0.02;tgt.ry=0;tgt.dist=18;tgt.px=0;tgt.py=0;}
-  if(mode==='side') {tgt.rx=0.25;tgt.ry=1.57;tgt.dist=18;tgt.px=0;tgt.py=0;}
+  if(mode==='persp'){tgt.rx=0.46;tgt.ry=0.55;tgt.dist=21;tgt.px=0;tgt.py=0;}
+  if(mode==='top')  {tgt.rx=-1.55;tgt.ry=0;tgt.dist=26;tgt.px=0;tgt.py=0;}
+  if(mode==='front'){tgt.rx=0.02;tgt.ry=0;tgt.dist=23;tgt.px=0;tgt.py=0;}
+  if(mode==='side') {tgt.rx=0.25;tgt.ry=1.57;tgt.dist=23;tgt.px=0;tgt.py=0;}
   document.getElementById('bbV').textContent=mode.toUpperCase();
 }
 
@@ -1600,179 +1618,54 @@ function box(cx,cy,cz,w,h,d,r,g,b,mid=null,bright_override=null){
   face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z0],[x1,y0,z1],[x0,y0,z1]],r,g,b,br[5]);
 }
 
-// floor tiles
-for(let x=-8;x<8;x+=0.8) for(let z=-8;z<8;z+=0.8){
-  const c=(Math.round(x/.8)+Math.round(z/.8))%2===0?.06:.044;
-  face([[x,0,z],[x+.8,0,z],[x,.0,z+.8],[x+.8,0,z],[x+.8,0,z+.8],[x,0,z+.8]],c*1.05,c,c*.9,1.0);
+// floor tiles — widened room, brighter so it doesn't read as a sealed dark box
+const ROOM=13;
+for(let x=-ROOM;x<ROOM;x+=0.8) for(let z=-ROOM;z<ROOM;z+=0.8){
+  const c=(Math.round(x/.8)+Math.round(z/.8))%2===0?.10:.075;
+  face([[x,0,z],[x+.8,0,z],[x,.0,z+.8],[x+.8,0,z],[x+.8,0,z+.8],[x,0,z+.8]],c*1.05,c,c*.95,1.0);
 }
-// floor yellow safety lines
-const sl=[[-4.5,0,-4.5,5.5,.02,.05],[-4.5,0,4.5,5.5,.02,.05],[5.0,0,-4.5,.05,.02,9]];
+// floor yellow perimeter walkway lines
+const sl=[[0,0,-ROOM+1.5,ROOM*2-3,.02,.05],[0,0,ROOM-1.5,ROOM*2-3,.02,.05],[-ROOM+1.5,0,0,.05,.02,ROOM*2-3],[ROOM-1.5,0,0,.05,.02,ROOM*2-3]];
 for(const [cx,cy,cz,w,h,d] of sl) box(cx,cy,cz,w,h,d,.7,.6,.02);
 
-// structural columns
-const SC=[.07,.06,.05];
-for(const [cx,cz] of [[-7,-7],[7,-7],[-7,7],[7,7],[-7,0],[7,0],[0,-7],[0,7]]){
-  box(cx,0,cz,.3,4.5,.3,...SC);
+// structural columns — pushed out wider, no ceiling tiles so the space reads open, not boxed
+const SC=[.10,.09,.08];
+for(const [cx,cz] of [[-ROOM+1,-ROOM+1],[ROOM-1,-ROOM+1],[-ROOM+1,ROOM-1],[ROOM-1,ROOM-1],[-ROOM+1,0],[ROOM-1,0]]){
+  box(cx,0,cz,.32,5.0,.32,...SC);
 }
-// roof beams
-box(0,4.5,0,15,.1,.15,...SC);box(0,4.5,-7,15,.1,.15,...SC);box(0,4.5,7,15,.1,.15,...SC);
-box(-7,4.5,0,.15,.1,15,...SC);box(7,4.5,0,.15,.1,15,...SC);
-// ceiling panels (dark)
-for(let x=-3;x<3;x++) for(let z=-3;z<3;z++){
-  box(x*2.3,4.4,z*2.3,2.2,.05,2.2,.05,.05,.06);
-}
-// overhead crane beam
-box(0,3.8,0,13,.15,.2,.2,.2,.25);
-box(-5,3.65,0,.2,.15,.35,.25,.25,.3);
-box(5,3.65,0,.2,.15,.35,.25,.25,.3);
+// roof beams only — open above, no solid ceiling panels
+box(0,5.0,-ROOM+1,ROOM*2-2,.12,.18,...SC);box(0,5.0,ROOM-1,ROOM*2-2,.12,.18,...SC);
+box(-ROOM+1,5.0,0,.18,.12,ROOM*2-2,...SC);box(ROOM-1,5.0,0,.18,.12,ROOM*2-2,...SC);
+box(0,4.2,0,ROOM*1.6,.16,.22,.22,.22,.28);
 
-// walls (far, faint)
-box(0,2.2,-8,16,.05,4.4,.06,.06,.07);
-box(0,2.2,8,16,.05,4.4,.06,.06,.07);
-box(-8,2.2,0,4.4,.05,16,.06,.06,.07);
-box(8,2.2,0,4.4,.05,16,.06,.06,.07);
+// walls — brighter than before so the room doesn't look pitch-black/enclosed
+box(0,2.4,-ROOM,ROOM*2,.05,4.8,.11,.115,.13);
+box(0,2.4,ROOM,ROOM*2,.05,4.8,.11,.115,.13);
+box(-ROOM,2.4,0,4.8,.05,ROOM*2,.11,.115,.13);
+box(ROOM,2.4,0,4.8,.05,ROOM*2,.11,.115,.13);
 
-// ── MACHINE M001: Drill Press Alpha ──────────────────────────────────────────
-mb.push({id:'M001',cx:-4,cy:1.5,cz:-2.5,hw:1.2,hh:1.5,hd:1.2}); // bounding box for click
-// base plate
-box(-4,0,-2.5,2.0,.12,1.8,.12,.12,.18);
-// column
-box(-4,.12,-2.5,.55,2.6,.55,.16,.38,.75);
-// motor housing on top
-box(-4,2.72,-2.5,.75,.5,.65,.12,.28,.62);
-// horizontal arm
-box(-3.1,2.6,-2.5,1.6,.28,.5,.10,.26,.58);
-// quill housing (static outer)
-box(-2.45,1.4,-2.5,.32,1.25,.32,.18,.42,.82);
-// control panel
-box(-4.75,1.2,-2.5,.12,.7,.55,.5,.45,.1);
-box(-4.75,1.55,-2.4,.12,.02,.3,.6,.55,.15);
-// base vise
-box(-3.8,.12,-2.5,1.2,.25,1.0,.22,.22,.28);
-box(-3.3,.37,-2.5,.5,.18,.6,.3,.3,.38);
-// coolant tank
-box(-5.0,.0,-2.0,.35,.55,.35,.05,.25,.45);
-// depth stop
-box(-2.45,2.55,-2.5,.08,.2,.08,.7,.6,.1);
-
-// DYNAMIC: drill spindle (animated up/down)
-dynMeshes.drill={start:vPos.length/3};
-box(-2.45,0.6,-2.5,.18,.85,.18,.22,.55,.95); // placeholder, overwritten in animation
-dynMeshes.drill.end=vPos.length/3;
-// drill bit
-dynMeshes.drillBit={start:vPos.length/3};
-box(-2.45,0.35,-2.5,.1,.3,.1,.6,.7,.9);
-dynMeshes.drillBit.end=vPos.length/3;
-
-// ── MACHINE M002: Assembly Line Beta ─────────────────────────────────────────
-mb.push({id:'M002',cx:1.5,cy:0.5,cz:0,hw:2.5,hh:0.5,hd:0.8});
-// frame sides
-box(-1.2,0,-.55,3.8,.18,.12,.45,.22,.08);
-box(-1.2,0, .55,3.8,.18,.12,.45,.22,.08);
-// end rollers
-box(-1.2,.18,0,.12,.22,.9,.55,.28,.1);
-box( 3.8,.18,0,.12,.22,.9,.55,.28,.1);
-// cross supports
-for(let xi=-1;xi<4;xi++){box(xi*.9+0.1,.0,0,.08,.18,.8,.35,.18,.06);}
-// belt surface (static base)
-box(1.3,.18,0,5.2,.06,.82,.3,.2,.08);
-// guide rails
-box(1.3,.24,-.44,5.2,.1,.04,.5,.35,.1);
-box(1.3,.24, .44,5.2,.1,.04,.5,.35,.1);
-// DYNAMIC: belt panels (animated sliding)
-dynMeshes.belt={start:vPos.length/3,panels:[]};
-for(let i=0;i<8;i++){
-  dynMeshes.belt.panels.push(vPos.length/3);
-  box(-1.0+i*0.62,.22,0,.55,.04,.78,.28,.22,.1,[.9,.9,.7,.7,1.0,.4]);
-}
-dynMeshes.belt.end=vPos.length/3;
-// DYNAMIC: parts on belt
-dynMeshes.parts={start:vPos.length/3};
-for(let i=0;i<4;i++){
-  box(-0.5+i*1.2,.28,0,.3,.22,.3,.85,.7,.15);
-}
-dynMeshes.parts.end=vPos.length/3;
-// robot arm (static base tower)
-box( 3.2,.18,-.5,.3,1.4,.3,.45,.2,.06);
-// DYNAMIC: robot arm (animated rotation/swing)
-dynMeshes.armBase={start:vPos.length/3};
-box(3.2,1.58,-.5,.15,.8,.15,.55,.25,.08);
-dynMeshes.armBase.end=vPos.length/3;
-dynMeshes.armFore={start:vPos.length/3};
-box(3.2,2.35,-.2,.12,.6,.12,.55,.25,.08);
-dynMeshes.armFore.end=vPos.length/3;
-// gripper
-dynMeshes.gripper={start:vPos.length/3};
-box(3.2,2.9,-.05,.25,.08,.2,.8,.6,.1);
-box(3.1,2.98,-.05,.06,.12,.06,.7,.5,.08);
-box(3.3,2.98,-.05,.06,.12,.06,.7,.5,.08);
-dynMeshes.gripper.end=vPos.length/3;
-// control cabinet
-box(-1.8,.0,-.8,.45,1.2,.35,.18,.17,.28);
-box(-1.8,1.2,-.8,.43,.5,.33,.14,.13,.24);
-box(-1.75,1.35,-.65,.06,.2,.18,.1,.55,.85);
-// parts in-feed bin
-box(-1.0,.0,.75,.6,.4,.5,.22,.20,.18);
-box(-1.0,.4,.75,.62,.05,.52,.3,.28,.24);
-// out-feed chute
-box(4.2,.0,0,.4,.4,.6,.25,.22,.2);
-box(4.5,.0,0,.3,.35,.55,.22,.2,.18);
-
-// ── MACHINE M003: Weld Station Gamma ─────────────────────────────────────────
-mb.push({id:'M003',cx:-1.5,cy:1.0,cz:4.5,hw:1.5,hh:1.0,hd:1.5});
-// welding table
-box(-1.5,.0,4.5,2.2,.12,2.0,.28,.26,.24);
-// table legs
-for(const [tx,tz] of [[-2.4,3.7],[-0.6,3.7],[-2.4,5.3],[-0.6,5.3]]){
-  box(tx,0,tz,.1,.75,.1,.2,.19,.18);
-}
-// robot base
-box(-1.5,.12,4.5,.45,1.1,.45,.4,.2,.06);
-// robot lower arm
-dynMeshes.weldArm1={start:vPos.length/3};
-box(-1.5,1.22,4.5,.16,1.0,.16,.5,.25,.08);
-dynMeshes.weldArm1.end=vPos.length/3;
-// robot upper arm
-dynMeshes.weldArm2={start:vPos.length/3};
-box(-1.2,2.18,4.3,.14,.75,.14,.5,.25,.08);
-dynMeshes.weldArm2.end=vPos.length/3;
-// wrist
-dynMeshes.weldWrist={start:vPos.length/3};
-box(-1.0,2.88,4.18,.18,.12,.18,.55,.28,.1);
-dynMeshes.weldWrist.end=vPos.length/3;
-// torch
-dynMeshes.torch={start:vPos.length/3};
-box(-1.0,2.75,4.05,.06,.45,.06,.6,.58,.55);
-box(-1.0,2.45,3.98,.05,.32,.05,.55,.52,.5);
-dynMeshes.torch.end=vPos.length/3;
-// workpiece on table
-box(-1.5,.12,4.5,.6,.3,.5,.4,.38,.35);
-box(-1.5,.42,4.5,.55,.08,.45,.5,.48,.44);
-// gas cylinder
-box(-2.65,0,4.5,.25,1.2,.25,.32,.30,.34);
-box(-2.65,1.2,4.5,.27,.12,.27,.42,.40,.44);
-// hose
-box(-2.52,.6,4.5,.13,.02,.02,.45,.42,.4);
-box(-2.52,.6,4.3,.02,.02,.25,.45,.42,.4);
-// welding screen
-box(-1.5,.12,3.55,2.0,.95,.06,.12,.1,.08);
-box(-1.5,.12,5.45,2.0,.95,.06,.12,.1,.08);
-// fume extractor
-box(-2.6,2.2,4.5,.12,.8,.12,.22,.21,.2);
-box(-2.3,3.0,4.5,.6,.1,.1,.22,.21,.2);
-box(-1.7,3.0,4.5,.1,.5,.1,.22,.21,.2);
-// control pendant
-box(-0.3,.0,3.4,.25,.9,.2,.16,.15,.22);
-box(-0.3,.9,3.4,.23,.35,.18,.13,.12,.18);
-
-// safety barriers
-box(-0.2,0,-0.5,.08,.6,5.5,.55,.42,.05);
-box( 3.3,0,-0.8,.08,.6,1.5,.55,.42,.05);
-box(-3.2,0,2.5,.08,.6,5.5,.55,.42,.05);
-// floor markings
-box(-4.0,.005,-2.5,3.2,.005,3.0,.85,.70,.02);
-box( 1.3,.005,0.0,5.5,.005,1.8,.85,.70,.02);
-box(-1.5,.005,4.5,3.2,.005,3.2,.85,.70,.02);
+// ── GENERIC MACHINE CELLS — one per live machine (up to 6), built from real data ──
+const SPACING=3.6;
+const N=MACHINES.length;
+MACHINES.forEach((m,i)=>{
+  const x=(i-(N-1)/2)*SPACING, z=0;
+  const tc=TYPE_COLOR[m.type]||[0.45,0.45,0.48];
+  mb.push({id:m.id,cx:x,cy:1.05,cz:z,hw:0.85,hh:1.15,hd:0.85});
+  box(x,0,z,1.5,.12,1.5,.13,.13,.15);                 // base plate
+  box(x,.12,z,.85,1.55,.85,tc[0],tc[1],tc[2]);          // main housing — colored by machine type
+  box(x,1.67,z,.62,.26,.62,Math.min(1,tc[0]*1.25),Math.min(1,tc[1]*1.25),Math.min(1,tc[2]*1.25)); // cap
+  box(x,1.0,z+0.44,.55,.22,.04,.07,.07,.08);            // nameplate panel
+  box(x-0.46,.5,z,.04,.5,.4,.45,.42,.1);                // side control panel
+  const bStart=vPos.length/3;
+  box(x,1.98,z,.2,.2,.2,.5,.5,.5);                      // beacon — dynamic, colored by live state below
+  const bEnd=vPos.length/3;
+  dynMeshes['beacon'+i]={start:bStart,end:bEnd,x,z,m};
+  const rStart=vPos.length/3;
+  box(x+0.5,0.3,z,.12,.5,.12,tc[0]*0.75,tc[1]*0.75,tc[2]*0.75); // moving arm — purely decorative motion
+  const rEnd=vPos.length/3;
+  dynMeshes['rod'+i]={start:rStart,end:rEnd,x:x+0.5,z,tc,phase:i*1.37};
+  box(x,.005,0,1.9,.005,1.9,.55,.46,.1);                 // floor marking under the cell
+});
 
 // Upload static geometry to GPU
 const STATIC_END=vPos.length/3;
@@ -1907,8 +1800,8 @@ function pickM(mx,my){
 }
 
 // ── Camera ────────────────────────────────────────────────────────────────────
-const cam={rx:0.38,ry:0.55,dist:17,px:0,py:0};
-const tgt={rx:0.38,ry:0.55,dist:17,px:0,py:0};
+const cam={rx:0.46,ry:0.55,dist:21,px:0,py:0};
+const tgt={rx:0.46,ry:0.55,dist:21,px:0,py:0};
 let curMVP=new Float32Array(16);
 let drag=false,sh=false,lx=0,ly=0;
 let autoOrbit=true,autoOrbitTimer=0;
@@ -1922,8 +1815,8 @@ window.addEventListener('mouseup',e=>{
     if(hit){
       upPanel(hit.id);showTT(hit.id,e.clientX,e.clientY);doRpl(e.clientX,e.clientY);
       // Fly camera toward selected machine
-      const pos={M001:{px:-1.5,py:-.5,dist:10,ry:0.3},M002:{px:0.5,py:-.3,dist:11,ry:0.0},M003:{px:0,py:-.2,dist:11,ry:0.6}};
-      const p=pos[hit.id];if(p){tgt.px=p.px;tgt.py=p.py;tgt.dist=p.dist;tgt.ry=p.ry;}
+      const idx=MACHINES.findIndex(mm=>mm.id===hit.id);
+      if(idx>=0){const fx=(idx-(MACHINES.length-1)/2)*3.6;tgt.px=fx*0.3;tgt.py=-0.35;tgt.dist=9.5;tgt.ry=0.4;}
     }else{hideTT();}
   }
   drag=false;canvas.style.cursor='crosshair';
@@ -1983,10 +1876,7 @@ function wbox(cx,cy,cz,w,h,d,p=0.1){
 }
 
 // ── Animation state ───────────────────────────────────────────────────────────
-let drillPhase=0,beltPhase=0,armPhase=0,weldPhase=0;
-let weldArcOn=false,weldArcTimer=0;
-let drillDown=0; // 0..1
-let partPositions=[0,1.2,2.4,3.6]; // belt parts
+let rodPhase=0;
 
 // ── Dynamic geometry update (write into existing GPU buffers) ─────────────────
 function setVertexRange(startVert,endVert,nx,ny,nz,nw,nh,nd,r,g,b){
@@ -2047,69 +1937,33 @@ function frame(){
   cam.px=lerp(cam.px,tgt.px,lf);
   cam.py=lerp(cam.py,tgt.py,lf);
 
-  // ── Animate machines ────────────────────────────────────────────────────────
-  drillPhase+=dt*2.5;
-  const drillY=0.6+Math.sin(drillPhase)*0.55; // spindle stroke
-  setVertexRange(dynMeshes.drill.start,dynMeshes.drill.end,-2.45,drillY,-2.5,.18,.85,.18,.22,.55,.95);
-  const bitY=drillY-.25;
-  setVertexRange(dynMeshes.drillBit.start,dynMeshes.drillBit.end,-2.45,bitY,-2.5,.1,.32,.1,.6,.7,.9);
-
-  // Drill chips when bit is near bottom
-  if(Math.sin(drillPhase)< -0.7&&Math.random()<0.4){
-    spawnParticle(-2.45,0.22,-2.5,2);
-  }
-  // Drill coolant steam
-  if(Math.random()<0.08) spawnParticle(-2.45,0.5,-2.5,3);
-
-  // Belt animation — scroll panels
-  beltPhase=(beltPhase+dt*0.9)%0.62;
-  for(let i=0;i<8;i++){
-    const px=-1.0+((i*0.62+beltPhase)%4.96)-0.0;
-    setVertexRange(dynMeshes.belt.panels[i],dynMeshes.belt.panels[i]+36,px,.22,0,.55,.04,.78,.28,.22,.1);
-  }
-  // Parts on belt
-  for(let i=0;i<4;i++){
-    partPositions[i]=(partPositions[i]+dt*0.9)%4.96;
-    const ppx=-1.0+partPositions[i];
-    setVertexRange(dynMeshes.parts.start+i*36,dynMeshes.parts.start+(i+1)*36,ppx,.28,0,.3,.22,.3,.85,.7,.15);
-  }
-  // Conveyor steam
-  if(Math.random()<0.04) spawnParticle(1.3+Math.random()*3,.35,Math.random()*.4-.2,3);
-
-  // Robot arm swing
-  armPhase+=dt*0.8;
-  const armSwing=Math.sin(armPhase)*0.5;
-  const armX=3.2+armSwing*0.4;
-  const armZ=-0.5+Math.cos(armPhase)*0.3;
-  setVertexRange(dynMeshes.armBase.start,dynMeshes.armBase.end,armX,1.58,armZ,.15,.8,.15,.55,.25,.08);
-  setVertexRange(dynMeshes.armFore.start,dynMeshes.armFore.end,armX+armSwing*.2,2.35,armZ-.2,.12,.6,.12,.55,.25,.08);
-  setVertexRange(dynMeshes.gripper.start,dynMeshes.gripper.end,armX+armSwing*.3,2.9,armZ-.05,.25,.08,.2,.8,.6,.1);
-
-  // Weld arm sweep
-  weldPhase+=dt*0.6;
-  const wx=-1.5+Math.sin(weldPhase)*0.4;
-  const wz=4.5+Math.cos(weldPhase)*0.3;
-  setVertexRange(dynMeshes.weldArm1.start,dynMeshes.weldArm1.end,-1.5,1.22,4.5,.16,1.0,.16,.5,.25,.08);
-  setVertexRange(dynMeshes.weldArm2.start,dynMeshes.weldArm2.end,wx-.3,2.18,wz-.2,.14,.75,.14,.5,.25,.08);
-  setVertexRange(dynMeshes.weldWrist.start,dynMeshes.weldWrist.end,wx-.1,2.88,wz-.32,.18,.12,.18,.55,.28,.1);
-  setVertexRange(dynMeshes.torch.start,dynMeshes.torch.end,wx-.1,2.72,wz-.45,.06,.45,.06,.6,.58,.55);
-
-  // Weld arc — sparks burst every ~1.2s
-  weldArcTimer-=dt;
-  if(weldArcTimer<=0){
-    weldArcOn=!weldArcOn;
-    weldArcTimer=weldArcOn?0.3+Math.random()*0.4:0.4+Math.random()*0.8;
-  }
-  if(weldArcOn){
-    const sparkCount=Math.floor(Math.random()*8)+4;
-    for(let i=0;i<sparkCount;i++) spawnParticle(wx-.1,2.55,wz-.58,0);
-    glowR=0.2;glowG=0.6;glowB=1.0;glowS=Math.min(glowS+dt*8,1.0);
-    // weld smoke
-    if(Math.random()<0.3) spawnParticle(wx-.1,2.6,wz-.55,1);
-  }else{
-    glowR=lerp(glowR,0.94,dt*2);glowG=lerp(glowG,0.65,dt*2);glowB=lerp(glowB,0.0,dt*2);
-    glowS=Math.max(0,glowS-dt*3);
-  }
+  // ── Animate machine cells — beacon color/pulse + rod motion driven by live state ──
+  rodPhase+=dt;
+  let anyArc=false;
+  MACHINES.forEach((m,i)=>{
+    const beac=dynMeshes['beacon'+i];
+    const rod=dynMeshes['rod'+i];
+    if(beac){
+      const sc=STATE_RGB[m.state]||[0.5,0.5,0.5];
+      let pulse=0.85;
+      if(m.state==='Failure'){pulse=0.5+0.5*Math.sin(T*8);}
+      else if(m.state==='Warning'||m.state==='Overloaded'){pulse=0.6+0.4*Math.sin(T*3);}
+      setVertexRange(beac.start,beac.end,beac.x,1.98,beac.z,.2,.2,.2,sc[0]*pulse,sc[1]*pulse,sc[2]*pulse);
+      if(m.state==='Failure'){
+        anyArc=true;
+        if(Math.random()<0.18) spawnParticle(beac.x,2.1,beac.z,0);
+        if(Math.random()<0.05) spawnParticle(beac.x,2.0,beac.z,1);
+      }else if(m.state==='Warning'||m.state==='Overloaded'){
+        if(Math.random()<0.04) spawnParticle(beac.x,2.0,beac.z,1);
+      }
+    }
+    if(rod){
+      const ry=0.3+Math.sin(T*1.6+rod.phase)*0.22;
+      setVertexRange(rod.start,rod.end,rod.x,ry,rod.z,.12,.5,.12,rod.tc[0]*0.75,rod.tc[1]*0.75,rod.tc[2]*0.75);
+    }
+  });
+  if(anyArc){glowR=0.95;glowG=0.25;glowB=0.15;glowS=Math.min(glowS+dt*8,1.0);}
+  else{glowR=lerp(glowR,0.94,dt*2);glowG=lerp(glowG,0.65,dt*2);glowB=lerp(glowB,0.0,dt*2);glowS=Math.max(0,glowS-dt*3);}
 
   // Camera shake on failure (future: wire to scenario)
   camShake=Math.max(0,camShake-dt*5);
@@ -2147,7 +2001,7 @@ function frame(){
   gl.viewport(0,0,canvas.width,canvas.height);
   const shakeX=camShake*(Math.random()-.5)*.015;
   const shakeY=camShake*(Math.random()-.5)*.015;
-  gl.clearColor(.025,.028,.038,1);
+  gl.clearColor(.05,.055,.075,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
 
@@ -2194,7 +2048,7 @@ function frame(){
 
   fc++;const n2=performance.now();if(n2-ft>=1000){document.getElementById('bbF').textContent=fc;fc=0;ft=n2;}
 }
-frame();upPanel('M001');
+frame();if(MACHINES.length)upPanel(MACHINES[0].id);
 </script>
 """
 
