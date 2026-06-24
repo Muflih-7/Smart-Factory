@@ -1,3 +1,12 @@
+---
+title: FactoryOS
+emoji: 🏭
+colorFrom: gray
+colorTo: yellow
+sdk: docker
+pinned: false
+---
+
 # FactoryOS — Unified Smart Factory Platform
 
 **A full-stack industrial monitoring platform combining real-time factory simulation, machine learning failure prediction, and a 3D digital twin — built as a single Flask application.**
@@ -19,7 +28,7 @@ It started as two separate projects — a predictive maintenance system and a di
 Real-time KPIs across the fleet — output, efficiency, OEE, health score — with per-machine cards showing temperature, load, and live AI risk predictions. Auto-refreshes every 3 seconds.
 
 **3D Digital Twin**
-Interactive WebGL factory floor view. Click any machine to inspect its live state in 3D space.
+Interactive WebGL factory floor view, hand-built without Three.js — custom shaders, particle system (weld sparks, drill chips, smoke), and click-to-select raycasting. Click any machine to inspect its live state in 3D space.
 
 **AI Failure Prediction**
 A `RandomForestClassifier` (scikit-learn, 100 estimators) trained on five sensor features — temperature, vibration, pressure, runtime hours, and oil level — predicts failure probability and estimates remaining useful life (RUL). Feature importance analysis shows **vibration and oil level are the dominant predictors** (~47% and ~36% of the model's decision weight respectively), which lines up with real-world rotating-machinery failure patterns — bearing wear and lubrication breakdown are typically the earliest and strongest failure signals, well ahead of temperature change. The dashboard also plots a 200-hour failure-probability timeline per machine.
@@ -32,6 +41,9 @@ Fleet-wide OEE, MTBF, MTTR, and defect-rate tracking, plus energy consumption an
 
 **Maintenance & Alerts**
 AI-prioritized maintenance scheduling (critical / high / medium / low) based on live RUL and health scores, a working-order logging system, and a live + historical alert center.
+
+**Notifications**
+Live notification feed for failure predictions and maintenance events, with unread tracking.
 
 **Reports & Export**
 PDF and Excel export for factory status snapshots and full ML prediction history.
@@ -52,14 +64,14 @@ Commission new machines (up to 100) or decommission existing ones on the fly.
 | Reports | reportlab (PDF), openpyxl (Excel) |
 | Auth | Werkzeug (password hashing) |
 | Deployment | Gunicorn + eventlet (async workers), Docker |
-| Frontend | Hand-built dark SCADA-style UI, no JS framework — inline SVG charts, custom CSS design system |
+| Frontend | Hand-built dark SCADA-style UI, no JS framework — inline SVG charts, custom CSS design system, hand-rolled WebGL 3D renderer |
 
 ## Architecture
 
 - **No database** — all machine state lives in memory and resets on restart. Intentional for a live demo/portfolio context; would need persistence (Postgres/SQLite) for production use.
 - **`Machine` class** — each unit tracks temperature, vibration, pressure, oil level, OEE, MTBF/MTTR, health score, and RUL, updated on a ~2-second tick driven by the active scenario mode.
 - **ML inference** — on each prediction request, the five live/sensor values are fed into the pre-trained `model.pkl`; if the model fails to load, the app falls back to a heuristic health-score formula so the platform degrades gracefully rather than crashing.
-- **Routes** — `/` dashboard, `/twin` 3D view, `/predict` ML interface, `/machine/<id>` detail view, `/analytics`, `/energy`, `/alerts`, `/maintenance`, `/reports`, `/settings`, plus machine commission/decommission endpoints.
+- **Routes** — `/` dashboard, `/twin` 3D view, `/predict` ML interface, `/machine/<id>` detail view, `/analytics`, `/energy`, `/alerts`, `/maintenance`, `/reports`, `/settings`, `/notifications`, plus machine commission/decommission endpoints.
 
 ## Running locally
 
