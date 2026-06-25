@@ -512,7 +512,7 @@ ICONS = {
     "bell":     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
 }
 
-FAVICON = '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2218%22 fill=%22%230f0f0f%22/%3E%3Crect x=%2222%22 y=%2222%22 width=%2256%22 height=%2256%22 rx=%228%22 fill=%22%23f0a500%22/%3E%3Crect x=%2240%22 y=%2240%22 width=%2220%22 height=%2220%22 fill=%22%230f0f0f%22/%3E%3C/svg%3E">'
+FAVICON = '<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%0A%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2218%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%23f0a500%22/%3E%0A%3Crect%20x%3D%2228%22%20y%3D%2258%22%20width%3D%2244%22%20height%3D%2214%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2233%22%20y%3D%2242%22%20width%3D%227%22%20height%3D%2216%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2246%22%20y%3D%2230%22%20width%3D%228%22%20height%3D%2228%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2260%22%20y%3D%2246%22%20width%3D%227%22%20height%3D%2212%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Ccircle%20cx%3D%2250%22%20cy%3D%2223%22%20r%3D%223.5%22%20fill%3D%22%230f0f0f%22/%3E%0A%3C/svg%3E">'
 
 def H(title, refresh=0):
     ref = f'<meta http-equiv="refresh" content="{refresh}">' if refresh else ''
