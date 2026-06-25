@@ -4,28 +4,37 @@ Merged: FactoryOS + Predictive Maintenance AI + DigitTwin
 """
 
 from flask import Flask, request, redirect, session, Response, jsonify
-import random
+import random, os, warnings
 from datetime import datetime, timedelta
-import io, time, math, pickle, json, numpy as np
+import io, time, math, pickle, json, numpy as np, pandas as pd
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# Silence sklearn's "X does not have valid feature names" warning — we fix this properly
+# below by passing a DataFrame with real column names, this just covers any edge cases.
+warnings.filterwarnings("ignore", message=".*does not have valid feature names.*")
+
 app = Flask(__name__)
-app.secret_key = "factoryos_2025_unified"
+# Falls back to a fixed demo key/credentials so local runs and the HF Space work out of
+# the box. For a real deployment, set FLASK_SECRET_KEY / ADMIN_PASSWORD / VIEWER_PASSWORD
+# as environment variables instead of relying on these defaults.
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "factoryos_2025_unified")
 
 try:
     with open('model.pkl', 'rb') as f:
         ml_model = pickle.load(f)
     ML_AVAILABLE = True
+    ML_FEATURE_NAMES = list(getattr(ml_model, "feature_names_in_", ["temperature","vibration","pressure","runtime_hours","oil_level"]))
 except Exception:
     ml_model = None
     ML_AVAILABLE = False
+    ML_FEATURE_NAMES = ["temperature","vibration","pressure","runtime_hours","oil_level"]
 
 MACHINE_TYPES = ["Drilling","Assembly","Welding","Packaging","Cutting","Pressing","Grinding"]
 
 users = {
-    'admin':  {'password': generate_password_hash('factory123'), 'role': 'admin'},
-    'viewer': {'password': generate_password_hash('viewer123'),  'role': 'viewer'},
+    'admin':  {'password': generate_password_hash(os.environ.get("ADMIN_PASSWORD", "factory123")), 'role': 'admin'},
+    'viewer': {'password': generate_password_hash(os.environ.get("VIEWER_PASSWORD", "viewer123")),  'role': 'viewer'},
 }
 
 def login_required(f):
@@ -230,7 +239,8 @@ def get_failure_timeline(rt,v,o,t,p):
     for h in hrs:
         fv=min(100,v+(h/5000)*40); fo=max(5,o-h*0.05); ft=min(140,t+h*0.02)
         fp=min(200,p+(h/5000)*25)  # project actual pressure forward instead of faking it from vibration
-        probs.append(round(ml_model.predict_proba(np.array([[ft,fv,fp,min(5000,rt+h),fo]]))[0][1]*100,1))
+        feat_df=pd.DataFrame([[ft,fv,fp,min(5000,rt+h),fo]],columns=ML_FEATURE_NAMES)
+        probs.append(round(ml_model.predict_proba(feat_df)[0][1]*100,1))
     return hrs,probs
 
 def get_action(risk,v,t,o,p,rul):
@@ -502,9 +512,11 @@ ICONS = {
     "bell":     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
 }
 
+FAVICON = '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2218%22 fill=%22%230f0f0f%22/%3E%3Crect x=%2222%22 y=%2222%22 width=%2256%22 height=%2256%22 rx=%228%22 fill=%22%23f0a500%22/%3E%3Crect x=%2240%22 y=%2240%22 width=%2220%22 height=%2220%22 fill=%22%230f0f0f%22/%3E%3C/svg%3E">'
+
 def H(title, refresh=0):
     ref = f'<meta http-equiv="refresh" content="{refresh}">' if refresh else ''
-    return f'<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · FactoryOS</title>{ref}<style>{CSS}</style></head><body>'
+    return f'<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">{FAVICON}<title>{title} · FactoryOS</title>{ref}<style>{CSS}</style></head><body>'
 
 def sidebar(active):
     sc = scenario["mode"]
@@ -751,7 +763,13 @@ def predict():
     sel=machines.get(machine_id)
     prefill={}
     if sel:
-        prefill={"temperature":round(sel.temp,1),"vibration":round(sel.vibration*20,1),"pressure":round(sel.pressure*40,1),"runtime_hours":int(sel.runtime_hours),"oil_level":round(sel.oil_level,1)}
+        # The live simulation tracks vibration in mm/s (~0.15-3.0) and pressure in bar (~1.0-3.5),
+        # but model.pkl was trained on a different abstracted 0-100 / 0-200 scale (see thresholds
+        # used throughout get_action/get_failure_timeline). These constants convert sim units to
+        # the model's expected input scale — they are NOT arbitrary, don't remove them.
+        VIB_SIM_TO_ML = 20
+        PRES_SIM_TO_ML = 40
+        prefill={"temperature":round(sel.temp,1),"vibration":round(sel.vibration*VIB_SIM_TO_ML,1),"pressure":round(sel.pressure*PRES_SIM_TO_ML,1),"runtime_hours":int(sel.runtime_hours),"oil_level":round(sel.oil_level,1)}
     if request.method=="POST":
         mid=request.form.get("machine_id",machine_id)
         temp=float(request.form.get("temperature",65))
@@ -762,14 +780,14 @@ def predict():
         health_score=calc_health_score(temp,vib,pres,oil)
         rul=calc_rul(rt,vib,oil,temp)
         if ML_AVAILABLE:
-            feat=np.array([[temp,vib,pres,rt,oil]])
+            feat=pd.DataFrame([[temp,vib,pres,rt,oil]],columns=ML_FEATURE_NAMES)
             pred_raw=ml_model.predict(feat)[0]
             prob=ml_model.predict_proba(feat)[0]
             risk=round(prob[1]*100,1); result="FAIL" if pred_raw==1 else "HEALTHY"
             action,urgency=get_action(risk,vib,temp,oil,pres,rul)
             tl_hrs,tl_probs=get_failure_timeline(rt,vib,oil,temp,pres)
             ai_exp=[]
-            for sensor,val,thresh,unit in [("Vibration",vib,45,"mm/s"),("Temperature",temp,85,"°C"),("Oil Level",oil,55,"%"),("Pressure",pres,120,"PSI")]:
+            for sensor,val,thresh,unit in [("Vibration",vib,45,"/100"),("Temperature",temp,85,"°C"),("Oil Level",oil,55,"%"),("Pressure",pres,120,"/200")]:
                 lvl="dn" if val>thresh*1.2 else "wn" if val>thresh else "ok"
                 colors={"dn":"var(--dn)","wn":"var(--wn)","ok":"var(--ok)"}
                 ai_exp.append({"sensor":sensor,"val":val,"unit":unit,"color":colors[lvl]})
@@ -855,12 +873,13 @@ def predict():
       <div class="card" style="margin-bottom:12px">
         <div class="ct">Sensor Input</div>
         {"" if ML_AVAILABLE else '<div class="nx nx-w" style="margin-bottom:12px">model.pkl not found — using health-score estimates</div>'}
+        <div class="nx nx-i" style="margin-bottom:12px;font-size:10px">Vibration and pressure use the model's training scale (0-100 / 0-200), auto-converted from each machine's live mm/s and bar readings — not raw physical units.</div>
         <form method="POST">
           <div class="fg"><label class="fl">Machine</label><select class="fs" name="machine_id">{machine_opts}</select></div>
           <div class="g2" style="gap:10px">
             <div class="fg"><label class="fl">Temperature (°C)</label><input class="fi" type="number" name="temperature" step="0.1" value="{prefill.get('temperature',65)}"/></div>
-            <div class="fg"><label class="fl">Vibration (mm/s)</label><input class="fi" type="number" name="vibration" step="0.1" value="{prefill.get('vibration',20)}"/></div>
-            <div class="fg"><label class="fl">Pressure (PSI)</label><input class="fi" type="number" name="pressure" step="0.1" value="{prefill.get('pressure',95)}"/></div>
+            <div class="fg"><label class="fl">Vibration (model scale 0-100)</label><input class="fi" type="number" name="vibration" step="0.1" value="{prefill.get('vibration',20)}"/></div>
+            <div class="fg"><label class="fl">Pressure (model scale 0-200)</label><input class="fi" type="number" name="pressure" step="0.1" value="{prefill.get('pressure',95)}"/></div>
             <div class="fg"><label class="fl">Runtime (hours)</label><input class="fi" type="number" name="runtime_hours" step="1" value="{prefill.get('runtime_hours',1000)}"/></div>
           </div>
           <div class="fg"><label class="fl">Oil Level (%)</label><input class="fi" type="number" name="oil_level" step="0.1" value="{prefill.get('oil_level',70)}"/></div>
@@ -868,7 +887,7 @@ def predict():
         </form>
       </div>
       {result_html}
-      {"" if not fi_rows else f'<div class="card" style="margin-top:12px"><div class="ct">Model Feature Importance</div><div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;line-height:1.5">What the Random Forest actually weighs when predicting failure — vibration and oil level dominate, consistent with real bearing-wear and lubrication-failure patterns.</div>{fi_rows}</div>'}
+      {"" if not fi_rows else f'<div class="card" style="margin-top:12px"><div class="ct">Model Info</div><div class="mr"><span class="mk">Algorithm</span><span class="mv">Random Forest Classifier</span></div><div class="mr"><span class="mk">Trees (estimators)</span><span class="mv">{getattr(ml_model,"n_estimators","—")}</span></div><div class="mr"><span class="mk">Split criterion</span><span class="mv">{getattr(ml_model,"criterion","—")}</span></div><div class="mr"><span class="mk">Max tree depth</span><span class="mv">{getattr(ml_model,"max_depth",None) or "Unlimited"}</span></div><div class="mr"><span class="mk">Input features</span><span class="mv">{len(ML_FEATURE_NAMES)}</span></div><hr><div class="ct" style="margin-bottom:10px">Feature Importance</div><div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;line-height:1.5">What the Random Forest actually weighs when predicting failure — vibration and oil level dominate, consistent with real bearing-wear and lubrication-failure patterns.</div>{fi_rows}</div>'}
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
@@ -980,6 +999,18 @@ def analytics():
     avg_mtbf=round(sum(m.mtbf for m in ms)/len(ms),1) if ms else 0
     total_down=sum(m.downtime_today for m in ms)
     avg_rul=int(sum(m.rul for m in ms)/len(ms)) if ms else 0
+    oee_bars="".join([f"""<div style="margin-bottom:13px">
+<div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px">
+<span style="font-weight:500">{m.display_name}</span>
+<span class="mv" style="color:{'var(--ok)' if m.oee>=80 else 'var(--wn)' if m.oee>=60 else 'var(--dn)'}">{m.oee}%</span>
+</div><div class="rb"><div class="rbf" style="width:{m.oee}%;background:{'var(--ok)' if m.oee>=80 else 'var(--wn)' if m.oee>=60 else 'var(--dn)'}"></div></div>
+</div>""" for m in sorted(ms,key=lambda m:-m.oee)])
+    health_bars="".join([f"""<div style="margin-bottom:13px">
+<div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px">
+<span style="font-weight:500">{m.display_name}</span>
+<span class="mv" style="color:{health_color(m.health_score)}">{round(m.health_score)}%</span>
+</div><div class="rb"><div class="rbf" style="width:{round(m.health_score)}%;background:{health_color(m.health_score)}"></div></div>
+</div>""" for m in sorted(ms,key=lambda m:-m.health_score)])
     return H("Analytics",5)+f"""
 {sidebar("analytics")}
 <main class="mn">
@@ -990,6 +1021,10 @@ def analytics():
     <div class="kpi"><div class="kl">Avg MTBF</div><div class="kv">{avg_mtbf}<span style="font-size:14px">h</span></div><div class="ks">Mean time between failures</div></div>
     <div class="kpi"><div class="kl">Total Downtime</div><div class="kv" style="color:{'var(--ok)' if total_down==0 else 'var(--wn)'}">{total_down}<span style="font-size:14px"> cyc</span></div></div>
     <div class="kpi"><div class="kl">Avg RUL</div><div class="kv" style="color:var(--ac)">{avg_rul}<span style="font-size:14px">h</span></div></div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="ct">OEE Comparison</div>{oee_bars}</div>
+    <div class="card"><div class="ct">Health Score Comparison</div>{health_bars}</div>
   </div>
   <div class="card"><div class="ct">Machine Performance Matrix</div>
     <div style="overflow-x:auto"><table><thead><tr><th>Machine</th><th>Type</th><th>State</th><th>OEE</th><th>MTBF</th><th>MTTR</th><th>Health</th><th>RUL</th><th>Defect</th><th></th></tr></thead>
@@ -1124,6 +1159,19 @@ def reports():
 </main></body></html>"""
 
 # ── SETTINGS ──────────────────────────────────────────────────────────────────
+@app.route("/settings/remove-user/<username>")
+@admin_required
+def remove_user(username):
+    if username == session.get("user"):
+        pass  # can't remove yourself — silently ignored, button is hidden for this case anyway
+    elif username in users:
+        admin_count = sum(1 for d in users.values() if d["role"] == "admin")
+        if users[username]["role"] == "admin" and admin_count <= 1:
+            pass  # can't remove the last admin account
+        else:
+            del users[username]
+    return redirect("/settings")
+
 @app.route("/settings", methods=["GET","POST"])
 @admin_required
 def settings():
@@ -1155,7 +1203,17 @@ def settings():
             if nu and np2: users[nu]={"password":generate_password_hash(np2),"role":request.form.get("new_role","viewer")}
             success="Settings saved."
     fields="".join([f'<div class="fg"><label class="fl">{m.display_name}</label><input class="fi" type="text" name="name_{k}" value="{m.display_name}"/></div>' for k,m in machines.items()])
-    user_rows="".join([f"<tr><td style='font-family:Space Mono,monospace'>{u}</td><td><span class='st {'st-fail' if d['role']=='admin' else 'st-maint'}'>{d['role'].upper()}</span></td></tr>" for u,d in users.items()])
+    admin_count = sum(1 for d in users.values() if d["role"] == "admin")
+    def user_action(u, d):
+        if u == session.get("user"):
+            return '<span style="color:var(--t3);font-size:10px">current user</span>'
+        if d["role"] == "admin" and admin_count <= 1:
+            return '<span style="color:var(--t3);font-size:10px">last admin</span>'
+        return f'<a href="/settings/remove-user/{u}" class="btn btn-dn btn-sm" onclick="return confirm(\'Remove user {u}?\')">Remove</a>'
+    user_rows = "".join([
+        f"<tr><td style='font-family:Space Mono,monospace'>{u}</td><td><span class='st {'st-fail' if d['role']=='admin' else 'st-maint'}'>{d['role'].upper()}</span></td><td>{user_action(u,d)}</td></tr>"
+        for u, d in users.items()
+    ])
     return H("Settings")+f"""
 {sidebar("settings")}
 <main class="mn">
@@ -1186,7 +1244,7 @@ def settings():
       </form></div>
     </div>
     <div class="card"><div class="ct">Users</div>
-      <table><thead><tr><th>Username</th><th>Role</th></tr></thead><tbody>{user_rows}</tbody></table>
+      <table><thead><tr><th>Username</th><th>Role</th><th></th></tr></thead><tbody>{user_rows}</tbody></table>
       <hr>
       <div class="ct" style="margin-bottom:8px">System Info</div>
       <div class="mr"><span class="mk">ML Model</span><span class="mv" style="color:{'var(--ok)' if ML_AVAILABLE else 'var(--wn)'}">{"Active — Random Forest" if ML_AVAILABLE else "Offline — model.pkl missing"}</span></div>
@@ -1956,6 +2014,19 @@ function frame(){
       }else if(m.state==='Warning'||m.state==='Overloaded'){
         if(Math.random()<0.04) spawnParticle(beac.x,2.0,beac.z,1);
       }
+      // Ambient type-flavor effects — only while the machine is actually Running, so a
+      // failed/maintenance machine doesn't look like it's still actively working.
+      if(m.state==='Running'){
+        if((m.type==='Welding'||m.type==='Grinding'||m.type==='Cutting') && Math.random()<0.05){
+          spawnParticle(beac.x,1.3,beac.z,0); // sparks at working height, not the beacon
+        }
+        if((m.type==='Drilling'||m.type==='Pressing') && Math.random()<0.03){
+          spawnParticle(beac.x,1.3,beac.z,2); // metal chips
+        }
+        if((m.type==='Assembly'||m.type==='Packaging') && Math.random()<0.02){
+          spawnParticle(beac.x,1.5,beac.z,3); // light steam/dust
+        }
+      }
     }
     if(rod){
       const ry=0.3+Math.sin(T*1.6+rod.phase)*0.22;
@@ -1964,6 +2035,7 @@ function frame(){
   });
   if(anyArc){glowR=0.95;glowG=0.25;glowB=0.15;glowS=Math.min(glowS+dt*8,1.0);}
   else{glowR=lerp(glowR,0.94,dt*2);glowG=lerp(glowG,0.65,dt*2);glowB=lerp(glowB,0.0,dt*2);glowS=Math.max(0,glowS-dt*3);}
+
 
   // Camera shake on failure (future: wire to scenario)
   camShake=Math.max(0,camShake-dt*5);
