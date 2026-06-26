@@ -6,7 +6,7 @@ Merged: FactoryOS + Predictive Maintenance AI + DigitTwin
 from flask import Flask, request, redirect, session, Response, jsonify
 import random, os, warnings
 from datetime import datetime, timedelta
-import io, time, math, pickle, json, numpy as np, pandas as pd
+import io, time, math, pickle, json, sqlite3, numpy as np, pandas as pd
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -66,6 +66,7 @@ class Machine:
         self.name = name
         self.display_name = display_name
         self.machine_type = machine_type
+        self.initial_load = initial_load
         self.load        = random.uniform(45, 65)
         # Start with safe, healthy values
         self.temp        = random.uniform(58, 68)
@@ -221,11 +222,147 @@ class Machine:
         if not a: a.append(("ok", f"{self.display_name}: All parameters nominal"))
         return a
 
-machines = {
-    "M001": Machine("M001","Drill Press Alpha","Drilling","Medium"),
-    "M002": Machine("M002","Assembly Line Beta","Assembly","Medium"),
-    "M003": Machine("M003","Weld Station Gamma","Welding","Medium"),
-}
+LOAD_RANGES = {"Low": (28, 48), "Medium": (45, 65), "High": (68, 86)}
+
+# ── PERSISTENCE (SQLite) ───────────────────────────────────────────────────────
+# Persists machine identity (id/name/type), users, thresholds, scenario mode, and all
+# logs (predictions/maintenance/alerts/notifications) across restarts. Live per-tick
+# sensor readings (temp/vibration/etc.) are intentionally NOT persisted — machines come
+# back with fresh simulated readings on restart, same as a real machine powering back on,
+# while their identity and full history survive. Note: on Hugging Face's free tier, a full
+# Space rebuild (new git push) resets the container filesystem entirely unless you've
+# enabled persistent storage — this protects against in-app restarts/crashes either way,
+# and fully protects you on hosts with a real persistent disk (Railway with a volume, etc).
+DB_PATH = os.environ.get("DB_PATH", "factoryos.db")
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY, password_hash TEXT NOT NULL, role TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS machines (
+        id TEXT PRIMARY KEY, display_name TEXT NOT NULL, machine_type TEXT NOT NULL,
+        initial_load TEXT NOT NULL, added_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS pred_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, machine_id TEXT,
+        temperature REAL, vibration REAL, pressure REAL, runtime_hours REAL, oil_level REAL,
+        result TEXT, risk REAL, health_score REAL, rul REAL, action TEXT, urgency TEXT
+    );
+    CREATE TABLE IF NOT EXISTS maintenance_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, machine_id TEXT,
+        action TEXT, technician TEXT, status TEXT
+    );
+    CREATE TABLE IF NOT EXISTS alert_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, sev TEXT, msg TEXT
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, title TEXT,
+        message TEXT, level TEXT, read INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS settings_kv (key TEXT PRIMARY KEY, value TEXT);
+    """)
+    conn.commit(); conn.close()
+
+def db_save_machine(m):
+    conn = get_db()
+    conn.execute("INSERT OR REPLACE INTO machines (id,display_name,machine_type,initial_load,added_at) VALUES (?,?,?,?,?)",
+                 (m.name, m.display_name, m.machine_type, m.initial_load, m.added_at))
+    conn.commit(); conn.close()
+
+def db_delete_machine(mid):
+    conn = get_db(); conn.execute("DELETE FROM machines WHERE id=?", (mid,)); conn.commit(); conn.close()
+
+def db_save_user(username, password_hash, role):
+    conn = get_db()
+    conn.execute("INSERT OR REPLACE INTO users (username,password_hash,role) VALUES (?,?,?)", (username, password_hash, role))
+    conn.commit(); conn.close()
+
+def db_delete_user(username):
+    conn = get_db(); conn.execute("DELETE FROM users WHERE username=?", (username,)); conn.commit(); conn.close()
+
+def db_save_setting(key, value):
+    conn = get_db()
+    conn.execute("INSERT OR REPLACE INTO settings_kv (key,value) VALUES (?,?)", (key, str(value)))
+    conn.commit(); conn.close()
+
+def db_log_prediction(p):
+    conn = get_db()
+    conn.execute("""INSERT INTO pred_history (timestamp,machine_id,temperature,vibration,pressure,runtime_hours,oil_level,result,risk,health_score,rul,action,urgency)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (p['timestamp'],p['machine_id'],p['temperature'],p['vibration'],p['pressure'],p['runtime_hours'],p['oil_level'],p['result'],p['risk'],p['health_score'],p['rul'],p['action'],p['urgency']))
+    conn.commit(); conn.close()
+
+def db_log_maintenance(e):
+    conn = get_db()
+    conn.execute("INSERT INTO maintenance_log (timestamp,machine_id,action,technician,status) VALUES (?,?,?,?,?)",
+        (e['timestamp'], e['machine_id'], e['action'], e['technician'], e['status']))
+    conn.commit(); conn.close()
+
+def db_log_alert(entry):
+    conn = get_db(); conn.execute("INSERT INTO alert_log (sev,msg) VALUES (?,?)", (entry['sev'], entry['msg'])); conn.commit(); conn.close()
+
+def db_log_notification(n):
+    conn = get_db()
+    cur = conn.execute("INSERT INTO notifications (timestamp,title,message,level,read) VALUES (?,?,?,?,0)",
+        (n['timestamp'], n['title'], n['message'], n['level']))
+    n['id'] = cur.lastrowid
+    conn.commit(); conn.close()
+
+def db_mark_notifications_read():
+    conn = get_db(); conn.execute("UPDATE notifications SET read=1"); conn.commit(); conn.close()
+
+def load_state():
+    global machines, users, pred_history, maintenance_log, alert_log, notifications, thresholds, machine_counter, scenario
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM machines").fetchall()
+    if not rows:
+        # Fresh database — seed with the default fleet + default users + default settings
+        defaults = [("M001","Drill Press Alpha","Drilling","Medium"),
+                     ("M002","Assembly Line Beta","Assembly","Medium"),
+                     ("M003","Weld Station Gamma","Welding","Medium")]
+        for mid, name, mtype, load in defaults:
+            m = Machine(mid, name, mtype, load)
+            machines[mid] = m
+            db_save_machine(m)
+        for uname, d in users.items():
+            db_save_user(uname, d['password'], d['role'])
+        for k, v in thresholds.items():
+            db_save_setting(f"thr_{k}", v)
+        db_save_setting("scenario_mode", scenario["mode"])
+        db_save_setting("machine_counter", machine_counter["count"])
+    else:
+        machines = {}
+        for r in rows:
+            m = Machine(r['id'], r['display_name'], r['machine_type'], r['initial_load'])
+            lo, hi = LOAD_RANGES.get(r['initial_load'], (45, 65))
+            m.load = random.uniform(lo, hi)
+            m.added_at = r['added_at']
+            machines[r['id']] = m
+        urows = conn.execute("SELECT * FROM users").fetchall()
+        if urows:
+            users = {r['username']: {'password': r['password_hash'], 'role': r['role']} for r in urows}
+        skv = {r['key']: r['value'] for r in conn.execute("SELECT * FROM settings_kv").fetchall()}
+        for k in ['temperature','vibration','pressure','oil_level']:
+            if f"thr_{k}" in skv: thresholds[k] = float(skv[f"thr_{k}"])
+        if "scenario_mode" in skv: scenario["mode"] = skv["scenario_mode"]
+        if "machine_counter" in skv: machine_counter["count"] = int(skv["machine_counter"])
+        pred_history = [dict(r) for r in conn.execute("SELECT * FROM pred_history ORDER BY id").fetchall()]
+        maintenance_log = [dict(r) for r in conn.execute("SELECT * FROM maintenance_log ORDER BY id").fetchall()]
+        alert_log = [{"sev": r["sev"], "msg": r["msg"]} for r in conn.execute("SELECT * FROM alert_log ORDER BY id DESC LIMIT 200").fetchall()]
+        notifications = [{"id": r["id"], "timestamp": r["timestamp"], "title": r["title"], "message": r["message"], "level": r["level"], "read": bool(r["read"])}
+                          for r in conn.execute("SELECT * FROM notifications ORDER BY id").fetchall()]
+    conn.close()
+
+machines = {}
+init_db()
+load_state()
 
 def calc_health_score(t,v,p,o):
     return round(max(0,min(100,100-0.2*max(0,t-65)-0.5*max(0,v-20)-(max(0,(40-o)*0.8) if o<40 else 0)-max(0,(p-100)*0.1))),1)
@@ -261,7 +398,9 @@ def get_action(risk,v,t,o,p,rul):
     return " · ".join(a), ("critical" if risk>70 else "warning" if risk>40 else "ok")
 
 def add_notification(title,msg,level="info"):
-    notifications.append({"id":len(notifications)+1,"timestamp":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"title":title,"message":msg,"level":level,"read":False})
+    n = {"id":len(notifications)+1,"timestamp":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"title":title,"message":msg,"level":level,"read":False}
+    notifications.append(n)
+    db_log_notification(n)
 
 def update_machines():
     now = time.time()
@@ -274,7 +413,9 @@ def update_machines():
             if sev == "critical":
                 entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
                 if not alert_log or alert_log[0]["msg"] != entry:
-                    alert_log.insert(0, {"sev":sev,"msg":entry})
+                    new_entry = {"sev":sev,"msg":entry}
+                    alert_log.insert(0, new_entry)
+                    db_log_alert(new_entry)
     if len(alert_log) > 200: alert_log.pop()
 
 def badge_cls(s):
@@ -515,8 +656,29 @@ ICONS = {
 FAVICON = '<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%0A%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2218%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%23f0a500%22/%3E%0A%3Crect%20x%3D%2228%22%20y%3D%2258%22%20width%3D%2244%22%20height%3D%2214%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2233%22%20y%3D%2242%22%20width%3D%227%22%20height%3D%2216%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2246%22%20y%3D%2230%22%20width%3D%228%22%20height%3D%2228%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Crect%20x%3D%2260%22%20y%3D%2246%22%20width%3D%227%22%20height%3D%2212%22%20fill%3D%22%230f0f0f%22/%3E%0A%3Ccircle%20cx%3D%2250%22%20cy%3D%2223%22%20r%3D%223.5%22%20fill%3D%22%230f0f0f%22/%3E%0A%3C/svg%3E">'
 
 def H(title, refresh=0):
-    ref = f'<meta http-equiv="refresh" content="{refresh}">' if refresh else ''
-    return f'<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">{FAVICON}<title>{title} · FactoryOS</title>{ref}<style>{CSS}</style></head><body>'
+    poll_js = ''
+    if refresh:
+        poll_js = f"""<script>
+(function(){{
+  let inFlight=false;
+  function softRefresh(){{
+    if(document.hidden||inFlight) return;
+    inFlight=true;
+    fetch(window.location.href,{{credentials:'same-origin'}}).then(function(r){{
+      if(r.redirected){{window.location.href=r.url;return null;}}
+      return r.text();
+    }}).then(function(html){{
+      if(!html) return;
+      const doc=new DOMParser().parseFromString(html,'text/html');
+      const newMain=doc.querySelector('main');
+      const curMain=document.querySelector('main');
+      if(newMain&&curMain) curMain.replaceWith(newMain);
+    }}).catch(function(){{}}).finally(function(){{inFlight=false;}});
+  }}
+  setInterval(softRefresh,{refresh*1000});
+}})();
+</script>"""
+    return f'<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">{FAVICON}<title>{title} · FactoryOS</title><style>{CSS}</style></head><body>{poll_js}'
 
 def sidebar(active):
     sc = scenario["mode"]
@@ -635,7 +797,9 @@ def logout():
 @app.route("/scenario/<mode>")
 def set_scenario(mode):
     if "user" not in session: return redirect("/login")
-    if mode in ["normal","high_load","failure"]: scenario["mode"]=mode
+    if mode in ["normal","high_load","failure"]:
+        scenario["mode"]=mode
+        db_save_setting("scenario_mode", mode)
     return redirect(request.referrer or "/")
 
 # ── DASHBOARD ─────────────────────────────────────────────────────────────────
@@ -741,6 +905,7 @@ def notifications_page():
     if not rows:
         rows = "<div style='color:var(--t3);font-size:11px;text-align:center;padding:30px;font-family:Space Mono,monospace'>No notifications yet — they'll appear here on failure predictions and maintenance logs.</div>"
     for n in notifications: n["read"] = True
+    if notifications: db_mark_notifications_read()
     return H("Notifications")+f"""
 {sidebar("notif")}
 <main class="mn">
@@ -794,7 +959,9 @@ def predict():
         else:
             risk=round(100-health_score,1); result="FAIL" if health_score<40 else "HEALTHY"
             action,urgency=get_action(risk,vib,temp,oil,pres,rul)
-        pred_history.append({"timestamp":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"machine_id":mid,"temperature":temp,"vibration":vib,"pressure":pres,"runtime_hours":rt,"oil_level":oil,"result":result,"risk":risk,"health_score":health_score,"rul":rul,"action":action,"urgency":urgency})
+        new_pred={"timestamp":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"machine_id":mid,"temperature":temp,"vibration":vib,"pressure":pres,"runtime_hours":rt,"oil_level":oil,"result":result,"risk":risk,"health_score":health_score,"rul":rul,"action":action,"urgency":urgency}
+        pred_history.append(new_pred)
+        db_log_prediction(new_pred)
         if result=="FAIL": add_notification(f"Failure — {mid}",f"Risk {risk}% · RUL {rul}h","danger")
         machine_id=mid; sel=machines.get(machine_id)
         if sel: prefill={"temperature":temp,"vibration":vib,"pressure":pres,"runtime_hours":int(rt),"oil_level":oil}
@@ -1089,7 +1256,9 @@ def alerts():
 def maintenance():
     ms=list(machines.values())
     if request.method=="POST":
-        maintenance_log.append({"timestamp":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"machine_id":request.form.get("machine_id",""),"action":request.form.get("action",""),"technician":session.get("user",""),"status":"Completed"})
+        new_entry={"timestamp":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"machine_id":request.form.get("machine_id",""),"action":request.form.get("action",""),"technician":session.get("user",""),"status":"Completed"}
+        maintenance_log.append(new_entry)
+        db_log_maintenance(new_entry)
         add_notification(f"Maintenance — {request.form.get('machine_id','')}",request.form.get("action",""),"info")
         return redirect("/maintenance")
     log_rows="".join([f"<tr><td style='font-family:Space Mono,monospace;font-size:10.5px'>{e['timestamp']}</td><td>{e['machine_id']}</td><td>{e['action']}</td><td>{e['technician']}</td><td><span class='st st-run'>DONE</span></td></tr>" for e in maintenance_log[::-1]]) or "<tr><td colspan='5' style='text-align:center;color:var(--t3);padding:20px;font-family:Space Mono,monospace'>No work orders logged yet</td></tr>"
@@ -1170,6 +1339,7 @@ def remove_user(username):
             pass  # can't remove the last admin account
         else:
             del users[username]
+            db_delete_user(username)
     return redirect("/settings")
 
 @app.route("/settings", methods=["GET","POST"])
@@ -1194,13 +1364,19 @@ def settings():
         if dup:
             error="Two machines can't share the same name."
         else:
-            for k,v in new_names.items(): machines[k].display_name=v
+            for k,v in new_names.items():
+                machines[k].display_name=v
+                db_save_machine(machines[k])
             thresholds['temperature']=float(request.form.get("thr_temp",85))
             thresholds['vibration']=float(request.form.get("thr_vib",1.8))
             thresholds['pressure']=float(request.form.get("thr_pres",3.0))
             thresholds['oil_level']=float(request.form.get("thr_oil",40))
+            for k in ['temperature','vibration','pressure','oil_level']:
+                db_save_setting(f"thr_{k}", thresholds[k])
             nu=request.form.get("new_username","").strip(); np2=request.form.get("new_password","").strip()
-            if nu and np2: users[nu]={"password":generate_password_hash(np2),"role":request.form.get("new_role","viewer")}
+            if nu and np2:
+                users[nu]={"password":generate_password_hash(np2),"role":request.form.get("new_role","viewer")}
+                db_save_user(nu, users[nu]["password"], users[nu]["role"])
             success="Settings saved."
     fields="".join([f'<div class="fg"><label class="fl">{m.display_name}</label><input class="fi" type="text" name="name_{k}" value="{m.display_name}"/></div>' for k,m in machines.items()])
     admin_count = sum(1 for d in users.values() if d["role"] == "admin")
@@ -1256,8 +1432,6 @@ def settings():
 </main></body></html>"""
 
 # ── ADD / DECOMMISSION ────────────────────────────────────────────────────────
-LOAD_RANGES = {"Low": (28, 48), "Medium": (45, 65), "High": (68, 86)}
-
 MAX_MACHINES = 6
 
 @app.route("/add-machine", methods=["GET","POST"])
@@ -1276,7 +1450,11 @@ def add_machine():
             lo,hi=LOAD_RANGES.get(load,(45,65))
             new_m.load=random.uniform(lo,hi)
             machines[mid]=new_m
-            alert_log.insert(0,{"sev":"info","msg":f"[{datetime.now().strftime('%H:%M:%S')}] {name} commissioned"})
+            db_save_machine(new_m)
+            db_save_setting("machine_counter", machine_counter["count"])
+            new_alert={"sev":"info","msg":f"[{datetime.now().strftime('%H:%M:%S')}] {name} commissioned"}
+            alert_log.insert(0,new_alert)
+            db_log_alert(new_alert)
             return redirect("/")
     type_opts="".join([f'<option value="{t}">{t}</option>' for t in MACHINE_TYPES])
     return H("Commission Machine")+f"""
@@ -1303,7 +1481,10 @@ def decommission(name):
     if request.method=="POST":
         if request.form.get("confirm_name","").strip()!=m.display_name: error=f"Name mismatch. Type exactly: {m.display_name}"
         else:
-            alert_log.insert(0,{"sev":"critical","msg":f"[{datetime.now().strftime('%H:%M:%S')}] {m.display_name} decommissioned"})
+            new_alert={"sev":"critical","msg":f"[{datetime.now().strftime('%H:%M:%S')}] {m.display_name} decommissioned"}
+            alert_log.insert(0,new_alert)
+            db_log_alert(new_alert)
+            db_delete_machine(name)
             del machines[name]; return redirect("/")
     return H("Decommission")+f"""
 {sidebar(name)}
