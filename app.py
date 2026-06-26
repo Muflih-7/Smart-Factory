@@ -4,7 +4,7 @@ Merged: FactoryOS + Predictive Maintenance AI + DigitTwin
 """
 
 from flask import Flask, request, redirect, session, Response, jsonify
-import random, os, warnings
+import random, os, warnings, secrets
 from datetime import datetime, timedelta
 import io, time, math, pickle, json, sqlite3, numpy as np, pandas as pd
 from functools import wraps
@@ -37,6 +37,22 @@ users = {
     'viewer': {'password': generate_password_hash(os.environ.get("VIEWER_PASSWORD", "viewer123")),  'role': 'viewer'},
 }
 
+def csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(16)
+    return session["csrf_token"]
+
+def csrf_field():
+    return f'<input type="hidden" name="csrf_token" value="{csrf_token()}">'
+
+@app.before_request
+def check_csrf():
+    if request.method == "POST":
+        token = session.get("csrf_token")
+        sent = request.form.get("csrf_token")
+        if not token or not sent or token != sent:
+            return "Session expired or invalid form submission. Please go back, refresh the page, and try again.", 403
+
 def login_required(f):
     @wraps(f)
     def d(*a, **k):
@@ -59,6 +75,25 @@ maintenance_log = []
 notifications   = []
 thresholds      = {'temperature': 85, 'vibration': 1.8, 'pressure': 3.0, 'oil_level': 40}
 last_update     = {"time": 0}
+
+# Simple in-memory login rate limiting (fine for single-worker deployment — see Dockerfile/
+# Procfile, both run --workers 1). Keyed by client IP: 5 failed attempts within 5 minutes
+# locks that IP out of login for 5 minutes.
+login_attempts = {}
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300
+
+def is_locked_out(key):
+    now = time.time()
+    attempts = [t for t in login_attempts.get(key, []) if now - t < LOGIN_WINDOW_SECONDS]
+    login_attempts[key] = attempts
+    return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+def record_failed_attempt(key):
+    login_attempts.setdefault(key, []).append(time.time())
+
+def clear_attempts(key):
+    login_attempts.pop(key, None)
 machine_counter = {"count": 3}
 
 class Machine:
@@ -238,6 +273,7 @@ DB_PATH = os.environ.get("DB_PATH", "factoryos.db")
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 def init_db():
@@ -769,11 +805,17 @@ def oee_ring(oee, size=88):
 @app.route("/login", methods=["GET","POST"])
 def login():
     error=""
+    client_key = request.remote_addr or "unknown"
     if request.method=="POST":
-        u=request.form.get("username",""); p=request.form.get("password","")
-        if u in users and check_password_hash(users[u]['password'],p):
-            session["user"]=u; session["role"]=users[u]["role"]; return redirect("/")
-        error="Invalid credentials"
+        if is_locked_out(client_key):
+            error="Too many failed attempts. Try again in a few minutes."
+        else:
+            u=request.form.get("username",""); p=request.form.get("password","")
+            if u in users and check_password_hash(users[u]['password'],p):
+                clear_attempts(client_key)
+                session["user"]=u; session["role"]=users[u]["role"]; return redirect("/")
+            record_failed_attempt(client_key)
+            error="Invalid credentials"
     return H("Sign in")+f"""
 <div class="lw"><div class="lb">
   <div class="ll">
@@ -783,6 +825,7 @@ def login():
   </div>
   {"" if not error else f'<div class="nx nx-d" style="margin-bottom:14px">{error}</div>'}
   <form method="POST">
+    {csrf_field()}
     <div class="fg"><label class="fl">Username</label><input class="fi" type="text" name="username" placeholder="admin" required autofocus/></div>
     <div class="fg"><label class="fl">Password</label><input class="fi" type="password" name="password" placeholder="••••••••" required/></div>
     <button type="submit" class="lbtn">SIGN IN →</button>
@@ -1042,6 +1085,7 @@ def predict():
         {"" if ML_AVAILABLE else '<div class="nx nx-w" style="margin-bottom:12px">model.pkl not found — using health-score estimates</div>'}
         <div class="nx nx-i" style="margin-bottom:12px;font-size:10px">Vibration and pressure use the model's training scale (0-100 / 0-200), auto-converted from each machine's live mm/s and bar readings — not raw physical units.</div>
         <form method="POST">
+          {csrf_field()}
           <div class="fg"><label class="fl">Machine</label><select class="fs" name="machine_id">{machine_opts}</select></div>
           <div class="g2" style="gap:10px">
             <div class="fg"><label class="fl">Temperature (°C)</label><input class="fi" type="number" name="temperature" step="0.1" value="{prefill.get('temperature',65)}"/></div>
@@ -1284,6 +1328,7 @@ def maintenance():
     </div>
     <div class="card"><div class="ct">Log Work Order</div>
       <form method="POST">
+        {csrf_field()}
         <div class="fg"><label class="fl">Machine</label><select class="fs" name="machine_id">{machine_opts}</select></div>
         <div class="fg"><label class="fl">Action Performed</label><input class="fi" type="text" name="action" placeholder="e.g. Replaced bearing, oil change..." required/></div>
         <div class="nx nx-i" style="margin-bottom:14px">Logged as {session.get('user','')} · {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
@@ -1400,7 +1445,7 @@ def settings():
   <div class="g2">
     <div>
       <div class="card" style="margin-bottom:12px"><div class="ct">Machine Names</div>
-      <form method="POST">{fields}
+      <form method="POST">{csrf_field()}{fields}
         <hr>
         <div class="ct" style="margin-bottom:12px">Alert Thresholds</div>
         <div class="g2" style="gap:10px">
@@ -1465,6 +1510,7 @@ def add_machine():
   <div class="card" style="max-width:480px">
     <div class="nx nx-i" style="margin-bottom:14px">Machine begins live simulation immediately on commission.</div>
     <form method="POST">
+      {csrf_field()}
       <div class="fg"><label class="fl">Machine Name *</label><input class="fi" type="text" name="display_name" placeholder="e.g. Drill Press Line 4" minlength="3" maxlength="40" required/></div>
       <div class="fg"><label class="fl">Machine Type *</label><select class="fs" name="machine_type">{type_opts}</select></div>
       <div class="fg"><label class="fl">Initial Load</label><select class="fs" name="initial_load"><option value="Low">Low (30–50%)</option><option value="Medium" selected>Medium (50–70%)</option><option value="High">High (70–85%)</option></select></div>
@@ -1495,6 +1541,7 @@ def decommission(name):
     <p style="font-size:12.5px;color:var(--t2);margin-bottom:16px">Permanently removes <strong>{m.display_name}</strong>. All data will be lost. Cannot be undone.</p>
     {"" if not error else f'<div class="nx nx-d" style="margin-bottom:12px">{error}</div>'}
     <form method="POST">
+      {csrf_field()}
       <div class="fg"><label class="fl">Type machine name to confirm: <span style="color:var(--dn)">{m.display_name}</span></label>
       <input class="fi" type="text" name="confirm_name" required autocomplete="off"/></div>
       <div style="display:flex;gap:8px"><button type="submit" class="btn btn-dn">Permanently Decommission</button><a href="/machine/{name}" class="btn btn-gh">Cancel</a></div>
@@ -1766,7 +1813,7 @@ function upPanel(id){
 
 function snapV(mode,btn){
   document.querySelectorAll('.vb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
-  if(mode==='persp'){tgt.rx=0.46;tgt.ry=0.55;tgt.dist=21;tgt.px=0;tgt.py=0;}
+  if(mode==='persp'){tgt.rx=0.46;tgt.ry=0.55;tgt.dist=DEFAULT_DIST;tgt.px=0;tgt.py=0;}
   if(mode==='top')  {tgt.rx=-1.55;tgt.ry=0;tgt.dist=26;tgt.px=0;tgt.py=0;}
   if(mode==='front'){tgt.rx=0.02;tgt.ry=0;tgt.dist=23;tgt.px=0;tgt.py=0;}
   if(mode==='side') {tgt.rx=0.25;tgt.ry=1.57;tgt.dist=23;tgt.px=0;tgt.py=0;}
@@ -2039,8 +2086,9 @@ function pickM(mx,my){
 }
 
 // ── Camera ────────────────────────────────────────────────────────────────────
-const cam={rx:0.46,ry:0.55,dist:21,px:0,py:0};
-const tgt={rx:0.46,ry:0.55,dist:21,px:0,py:0};
+const DEFAULT_DIST=Math.max(13,Math.min(21,11+MACHINES.length*1.7));
+const cam={rx:0.46,ry:0.55,dist:DEFAULT_DIST,px:0,py:0};
+const tgt={rx:0.46,ry:0.55,dist:DEFAULT_DIST,px:0,py:0};
 let curMVP=new Float32Array(16);
 let drag=false,sh=false,lx=0,ly=0;
 let autoOrbit=true,autoOrbitTimer=0;
